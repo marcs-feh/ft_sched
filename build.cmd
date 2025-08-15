@@ -6,21 +6,21 @@ set cc=clang++
 set cflags=-std=c++14 -fno-strict-aliasing -fwrapv -O0
 set wflags=-Wall -Wextra -Werror=return-type -D_CRT_SECURE_NO_WARNINGS
 
-rem Code Generation
+echo [Code generation]
 %cc% %cflags% %wflags% generate.cpp base.cpp -o generate.exe
 if %ERRORLEVEL% NEQ 0 GOTO ERROR
 
-echo [Code generation]
 generate.exe
 if %ERRORLEVEL% NEQ 0 GOTO ERROR
 
-rem Compile project
-rem %cc% %cflags% %wflags% main.cpp base.cpp -o ft_sched.exe
-rem if %ERRORLEVEL% NEQ 0 GOTO ERROR
+echo [Compile]
+%cc% %cflags% %wflags% main.cpp base.cpp -o ft_sched.exe
+if %ERRORLEVEL% NEQ 0 GOTO ERROR
 
-rem ft_sched.exe
-rem if %ERRORLEVEL% NEQ 0 GOTO ERROR
+ft_sched.exe
+if %ERRORLEVEL% NEQ 0 GOTO ERROR
 
+rem --------------------------------------------
 :SUCCESS
 exit /b 0
 
