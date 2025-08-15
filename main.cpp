@@ -1,5 +1,8 @@
 #include "base.hpp"
 
+#include "ft_sched.hpp"
+#include "crc32.gen.cpp"
+
 extern "C" {
 	int printf(char const*, ...);
 }

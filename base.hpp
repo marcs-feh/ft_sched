@@ -408,10 +408,10 @@ RuneEncoded rune_encode(rune r);
 
 RuneDecoded rune_decode(u8 const* buf, u32 buflen);
 
-String clone(Arena* arena, String s);
+String clone(Allocator allocator, String s);
 
 cstring clone_to_cstring(String s, Arena* a);
 
-String str_vprintf(Arena* arena, char const* fmt, va_list args);
+String arena_vprintf(Arena* arena, char const* fmt, va_list args);
 
-String str_printf(Arena* arena, char const* fmt, ...);
+String arena_printf(Arena* arena, char const* fmt, ...);

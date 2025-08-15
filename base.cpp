@@ -225,13 +225,13 @@ String skip(String s, usize count) {
 	return String(&s.data[count], s.len - count);
 }
 
-String clone(Arena* arena, String s){
+String clone(Allocator allocator, String s){
 	String res = {};
-	u8* buf = (u8*)arena_alloc(arena, s.len, alignof(char));
-	if(buf == nullptr){ return res; }
-	mem_copy_no_overlap(buf, s.data, s.len);
+	auto buf = make_slice<u8>(allocator, s.len);
+	if(buf.data == nullptr){ return res; }
+	mem_copy_no_overlap(buf.data, s.data, s.len);
 
-	res.data = (char const*)buf;
+	res.data = (char const*)buf.data;
 	res.len = s.len;
 
 	return res;
@@ -378,7 +378,7 @@ RuneEncoded rune_encode(rune r){
 	}
 }
 
-String str_vprintf(Arena* arena, char const* fmt, va_list args){
+String arena_vprintf(Arena* arena, char const* fmt, va_list args){
 	void* base = (void*)((uintptr)arena->data + arena->offset);
 	usize size = arena->capacity - arena->offset;
 
@@ -390,10 +390,10 @@ String str_vprintf(Arena* arena, char const* fmt, va_list args){
 	return {};
 }
 
-String str_printf(Arena* arena, char const* fmt, ...){
+String arena_printf(Arena* arena, char const* fmt, ...){
 	va_list args;
 	va_start(args, fmt);
-	String res = str_vprintf(arena, fmt, args);
+	String res = arena_vprintf(arena, fmt, args);
 	va_end(args);
 	return res;
 }
