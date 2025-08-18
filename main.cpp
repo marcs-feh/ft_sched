@@ -7,7 +7,7 @@ extern "C" {
 	int printf(char const*, ...);
 }
 
-// - CRC32
+// - SPSC bounded atomic queue
 // - Task interface
 
 template<class T>
@@ -20,7 +20,11 @@ void print_list(List<T> const& list, char const* elem_fmt){
 }
 
 int main(){
-	auto nums = make_list<f32>(heap_allocator());
+	constexpr usize arena_size = 8 * mem_kilobyte;
+	static u8 arena_memory[arena_size] = {0};
+
+	auto arena = arena_from_buffer({arena_memory, arena_size});
+	auto nums = make_list<f32>(&arena);
 
 	for(f32 i = 0; i < 30; i++){
 		print_list(nums, "%.1f");

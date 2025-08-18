@@ -160,19 +160,19 @@ PERFORMANCE vs MSVC 2008 32-/64-bit (GCC is even slower than MSVC):
 #endif
 
 #ifndef STBSP__ASAN
-#define STBSP__ASAN
+ #define STBSP__ASAN
 #endif
 
 #ifdef STB_SPRINTF_STATIC
-#define STBSP__PUBLICDEC static
-#define STBSP__PUBLICDEF static STBSP__ASAN
+ #define STBSP__PUBLICDEC static
+ #define STBSP__PUBLICDEF static STBSP__ASAN
 #else
 #ifdef __cplusplus
-#define STBSP__PUBLICDEC extern "C"
-#define STBSP__PUBLICDEF extern "C" STBSP__ASAN
+ #define STBSP__PUBLICDEC extern "C"
+ #define STBSP__PUBLICDEF extern "C" STBSP__ASAN
 #else
-#define STBSP__PUBLICDEC extern
-#define STBSP__PUBLICDEF STBSP__ASAN
+ #define STBSP__PUBLICDEC extern
+ #define STBSP__PUBLICDEF STBSP__ASAN
 #endif
 #endif
 
@@ -187,9 +187,9 @@ PERFORMANCE vs MSVC 2008 32-/64-bit (GCC is even slower than MSVC):
 #endif
 
 #ifdef _MSC_VER
-#define STBSP__NOTUSED(v)  (void)(v)
+   #define STBSP__NOTUSED(v)  (void)(v)
 #else
-#define STBSP__NOTUSED(v)  (void)sizeof(v)
+   #define STBSP__NOTUSED(v)  (void)sizeof(v)
 #endif
 
 #include <stdarg.h> // for va_arg(), va_list()
@@ -276,19 +276,19 @@ STBSP__PUBLICDEF void STB_SPRINTF_DECORATE(set_separators)(char pcomma, char ppe
    stbsp__comma = pcomma;
 }
 
-#define STBSP__LEFTJUST 1
-#define STBSP__LEADINGPLUS 2
-#define STBSP__LEADINGSPACE 4
-#define STBSP__LEADING_0X 8
-#define STBSP__LEADINGZERO 16
-#define STBSP__INTMAX 32
-#define STBSP__TRIPLET_COMMA 64
-#define STBSP__NEGATIVE 128
-#define STBSP__METRIC_SUFFIX 256
-#define STBSP__HALFWIDTH 512
+#define STBSP__LEFTJUST       1
+#define STBSP__LEADINGPLUS    2
+#define STBSP__LEADINGSPACE   4
+#define STBSP__LEADING_0X     8
+#define STBSP__LEADINGZERO    16
+#define STBSP__INTMAX         32
+#define STBSP__TRIPLET_COMMA  64
+#define STBSP__NEGATIVE       128
+#define STBSP__METRIC_SUFFIX  256
+#define STBSP__HALFWIDTH      512
 #define STBSP__METRIC_NOSPACE 1024
-#define STBSP__METRIC_1024 2048
-#define STBSP__METRIC_JEDEC 4096
+#define STBSP__METRIC_1024    2048
+#define STBSP__METRIC_JEDEC   4096
 
 static void stbsp__lead_sign(stbsp__uint32 fl, char *sign)
 {

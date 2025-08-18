@@ -9,7 +9,7 @@ constexpr usize SCRATCH_ARENA_SIZE = 8 * 1024LL * 1024LL;
 thread_local Arena scratch_arena = {};
 
 void init(){
-	auto buf = make_slice<u8>(heap_allocator(), SCRATCH_ARENA_SIZE);
+	auto buf = Slice<u8>{new u8[SCRATCH_ARENA_SIZE], SCRATCH_ARENA_SIZE};
 	scratch_arena = arena_from_buffer(buf);
 }
 
@@ -41,8 +41,8 @@ struct StringBuilder {
 	List<u8> buf;
 };
 
-StringBuilder builder_create(usize cap, Allocator alloc){
-	StringBuilder sb = { make_list<u8>(alloc, 0, cap) };
+StringBuilder builder_create(usize cap, Arena* arena){
+	StringBuilder sb = { make_list<u8>(arena, 0, cap) };
 	return sb;
 }
 
@@ -69,7 +69,7 @@ Slice<u8> builder_bytes(StringBuilder const& sb){
 int main(){
 	init();
 
-	auto allocator = arena_allocator(&scratch_arena);
+	auto allocator = &scratch_arena;
 	/* Generate CRC32 */ {
 		constexpr u32 CRC32_POLYNOMIAL = 0xEDB88320;
 

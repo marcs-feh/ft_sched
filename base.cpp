@@ -12,21 +12,54 @@ usize cstring_len(cstring cs) {
 	return n;
 }
 
-//// Assertions
+//// External dependencies
 extern "C"{
 	[[noreturn]] void abort();
 	#include <stdio.h>
 }
 
-void panic_ex(char const* msg, char const* filename, int line){
-	fprintf(stderr, "(%s:%d) Panic: %s\n", filename, line, msg);
+static inline
+void error_write(char const* msg){
+	fputs(msg, stderr);
+}
+
+[[noreturn]] static inline
+void trap(){
 	abort();
+}
+
+//// Assertions
+static
+int error_vprintf(char const* filename, int line, char const* fmt, va_list args){
+	int n = 0;
+	char buf[128] = {0};
+
+	n += stbsp_snprintf(&buf[0], sizeof(buf), "(%s:%d) ", filename, line);
+	n += stbsp_vsnprintf(&buf[n], sizeof(buf) - n, fmt, args);
+
+	error_write(&buf[0]);
+	return n;
+}
+
+static
+int error_printf(char const* filename, int line, char const* fmt, ...){
+	int n = 0;
+	va_list args;
+	va_start(args, fmt);
+	n = error_vprintf(filename, line, fmt, args);
+	va_end(args);
+	return n;
+}
+
+void panic_ex(char const* msg, char const* filename, int line){
+	error_printf(filename, line, "Panic: %s", msg);
+	trap();
 }
 
 bool ensure_ex(bool pred, char const* msg, char const* filename, int line){
 	if(!pred){
-		fprintf(stderr, "(%s:%d) Assertion failed: %s\n", filename, line, msg);
-		abort();
+		error_printf(filename, line, "Assertion failed: %s", msg);
+		trap();
 	}
 	return pred;
 }
@@ -173,38 +206,6 @@ void arena_region_end(ArenaRegion reg){
 	reg.arena->region_count -= 1;
 }
 
-static
-void* arena_allocator_func(void* data, AllocatorMode mode, void* ptr, usize old_size, usize new_size, usize align){
-	auto arena = (Arena*)data;
-	void* result = nullptr;
-
-	switch(mode){
-	case AllocatorMode_Alloc:
-		result = arena_alloc(arena, new_size, align);
-	break;
-
-	case AllocatorMode_Realloc:
-		result = arena_realloc(arena, ptr, old_size, new_size, align);
-	break;
-
-	case AllocatorMode_Free:
-		arena_resize(arena, ptr, 0);
-	break;
-
-	case AllocatorMode_FreeAll:
-		arena_reset(arena);
-	break;
-
-	default: panic("Invalid mode");
-	}
-
-	return result;
-}
-
-Allocator arena_allocator(Arena* a){
-	return Allocator{arena_allocator_func, a};
-}
-
 //// String
 String slice(String s) {
 	return s;
@@ -225,9 +226,9 @@ String skip(String s, usize count) {
 	return String(&s.data[count], s.len - count);
 }
 
-String clone(Allocator allocator, String s){
+String clone(Arena* a, String s){
 	String res = {};
-	auto buf = make_slice<u8>(allocator, s.len);
+	auto buf = make_slice<u8>(a, s.len);
 	if(buf.data == nullptr){ return res; }
 	mem_copy_no_overlap(buf.data, s.data, s.len);
 
@@ -398,57 +399,9 @@ String arena_printf(Arena* arena, char const* fmt, ...){
 	return res;
 }
 
-
+//// Heap
 extern "C"{
 	void* malloc(size_t);
 	void* realloc(void*, size_t);
 	void free(void*);
-}
-
-//// Heap
-static
-void* heap_allocator_func(void*, AllocatorMode mode, void* ptr, usize old_size, usize new_size, usize align){
-	void* result = nullptr;
-
-	switch(mode){
-	case AllocatorMode_Alloc:
-		if(align > alignof(max_align_t)){ // TODO: Custom alignment
-			return nullptr;
-		}
-
-		result = malloc(new_size);
-		if(result){
-			mem_zero(result, new_size);
-		}
-	break;
-
-	case AllocatorMode_Realloc:
-		if(align > alignof(max_align_t)){ // TODO: Custom alignment
-			return nullptr;
-		}
-
-		result = realloc(ptr, new_size);
-		if(result && (new_size > old_size)){
-			uintptr diff = new_size - old_size;
-			void* to_zero = (void*)(uintptr(result) + old_size);
-			mem_zero(to_zero, diff);
-		}
-	break;
-
-	case AllocatorMode_Free:
-		free(ptr);
-	break;
-
-	case AllocatorMode_FreeAll:
-		/* Unsupported */
-	break;
-
-	default: panic("Invalid mode");
-	}
-
-	return result;
-}
-
-Allocator heap_allocator(){
-	return { heap_allocator_func, nullptr };
 }
