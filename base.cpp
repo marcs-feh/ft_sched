@@ -102,26 +102,26 @@ uintptr mem_align_forward_ptr(uintptr p, uintptr a){
 }
 
 //// Arena
-void arena_reset(Arena* a){
-	ensure(a->region_count == 0, "Arena has dangling regions");
-	a->offset = 0;
-	a->last_allocation = nullptr;
+void Arena::reset(){
+	ensure(this->region_count == 0, "Arena has dangling regions");
+	this->offset = 0;
+	this->last_allocation = nullptr;
 }
 
-bool arena_owns(Arena* a, void* p){
+bool Arena::owns(void* p){
 	uintptr ptr = (uintptr)p;
-	uintptr lo = (uintptr)a->data;
-	uintptr hi = lo + a->capacity;
+	uintptr lo = (uintptr)this->data;
+	uintptr hi = lo + this->capacity;
 
 	return (ptr >= lo) && (ptr <= hi);
 }
 
-void* arena_alloc(Arena* a, usize size, usize align){
+void* Arena::alloc(usize size, usize align){
 	if(size == 0){ return nullptr; }
-	uintptr base = (uintptr)a->data;
-	uintptr current = base + (uintptr)a->offset;
+	uintptr base = (uintptr)this->data;
+	uintptr current = base + (uintptr)this->offset;
 
-	usize available = a->capacity - (current - base);
+	usize available = this->capacity - (current - base);
 
 	uintptr aligned  = mem_align_forward_ptr(current, align);
 	uintptr padding  = aligned - current;
@@ -131,26 +131,26 @@ void* arena_alloc(Arena* a, usize size, usize align){
 		return nullptr; /* Out of memory */
 	}
 
-	a->offset += required;
+	this->offset += required;
 	void* allocation = (void*)aligned;
-	a->last_allocation = allocation;
+	this->last_allocation = allocation;
 	mem_zero(allocation, size);
 
 	return allocation;
 }
 
-void* arena_realloc(Arena* a, void* ptr, usize old_size, usize new_size, usize align){
+void* Arena::realloc(void* ptr, usize old_size, usize new_size, usize align){
 	if(ptr == nullptr){
-		return arena_alloc(a, new_size, align);
+		return this->alloc(new_size, align);
 	}
-	ensure(arena_owns(a, ptr), "Pointer not owned by arena");
+	ensure(this->owns(ptr), "Pointer not owned by arena");
 
-	bool in_place = arena_resize(a, ptr, new_size);
+	bool in_place = this->resize(ptr, new_size);
 	if(in_place){
 		return ptr;
 	}
 	else {
-		void* new_data = arena_alloc(a, new_size, align);
+		void* new_data = this->alloc(new_size, align);
 		if(new_data == nullptr){ return nullptr; } /* Out of memory */
 		mem_copy(new_data, ptr, min(old_size, new_size));
 
@@ -158,20 +158,20 @@ void* arena_realloc(Arena* a, void* ptr, usize old_size, usize new_size, usize a
 	}
 }
 
-bool arena_resize(Arena* a, void* ptr, usize new_size){
+bool Arena::resize(void* ptr, usize new_size){
 	if(ptr == nullptr){ return false; }
-	ensure(arena_owns(a, ptr), "Pointer not owned by arena");
+	ensure(this->owns(ptr), "Pointer not owned by arena");
 
-	uintptr base = (uintptr)a->data;
+	uintptr base = (uintptr)this->data;
 
-	if(ptr == a->last_allocation){
-		uintptr last_alloc = (uintptr)a->last_allocation;
+	if(ptr == this->last_allocation){
+		uintptr last_alloc = (uintptr)this->last_allocation;
 
-		if((last_alloc + new_size) > (base + a->capacity)){
+		if((last_alloc + new_size) > (base + this->capacity)){
 			return false; /* No space left */
 		}
 
-		a->offset = (last_alloc + new_size) - base;
+		this->offset = (last_alloc + new_size) - base;
 		// TODO: fill excess with 0s when increasing the allocation size
 		return true;
 	}
@@ -207,33 +207,33 @@ void arena_region_end(ArenaRegion reg){
 }
 
 //// String
-String slice(String s) {
-	return s;
+String String::slice() {
+	return *this;
 }
 
-String slice(String s, usize start, usize end) {
-	ensure(end <= s.len && end >= start, "Invalid slicing indices");
-	return String(&s.data[start], end - start);
+String String::slice(usize start, usize end) {
+	ensure(end <= this->len && end >= start, "Invalid slicing indices");
+	return String(&this->data[start], end - start);
 }
 
-String take(String s, usize count) {
-	ensure(count <= s.len, "Cannot take more than string length");
-	return String(s.data, count);
+String String::take(usize count) {
+	ensure(count <= this->len, "Cannot take more than string length");
+	return String(this->data, count);
 }
 
-String skip(String s, usize count) {
-	ensure(count <= s.len, "Cannot skip more than string length");
-	return String(&s.data[count], s.len - count);
+String String::skip(usize count) {
+	ensure(count <= this->len, "Cannot skip more than string length");
+	return String(&this->data[count], this->len - count);
 }
 
-String clone(Arena* a, String s){
+String String::clone(Arena* a){
 	String res = {};
-	auto buf = make_slice<u8>(a, s.len);
+	auto buf = make_slice<u8>(a, this->len);
 	if(buf.data == nullptr){ return res; }
-	mem_copy_no_overlap(buf.data, s.data, s.len);
+	mem_copy_no_overlap(buf.data, this->data, this->len);
 
 	res.data = (char const*)buf.data;
-	res.len = s.len;
+	res.len = this->len;
 
 	return res;
 }
@@ -245,6 +245,19 @@ cstring clone_to_cstring(String s, Arena* a){
 		buf.data[s.len] = 0;
 	}
 	return (cstring)buf.data;
+}
+
+isize String::find(String sub, usize offset){
+	if(sub.len > this->len){ return -1; }
+	ensure(offset <= this->len, "Invalid search offset");
+
+	for(usize i = offset; i <= (this->len - sub.len); i += 1){
+		if(mem_compare(&this->data[i], sub.data, sub.len) == 0){
+			return i;
+		}
+	}
+
+	return -1;
 }
 
 #define MASKX 0x3f /* 0011_1111 */

@@ -60,6 +60,25 @@ struct Slice {
 	T* data;
 	usize len;
 
+	Slice<T> slice() {
+		return *this;
+	}
+
+	Slice<T> slice(usize start, usize end) {
+		ensure(end <= this->len && end >= start, "Invalid slicing indices");
+		return Slice<T>{ &this->data[start], end - start };
+	}
+
+	Slice<T> take(usize count) {
+		ensure(count <= this->len, "Cannot take more than slice length");
+		return Slice<T>{ this->data, this->count };
+	}
+
+	Slice<T> skip(usize count) {
+		ensure(count <= this->len, "Cannot skip more than slice length");
+		return Slice<T>{ &this->data[count], this->len - count };
+	}
+
 	T& operator[](usize idx){
 		ensure(idx < len, "Out of bounds access");
 		return data[idx];
@@ -71,28 +90,6 @@ struct Slice {
 	}
 };
 
-template<class T>
-Slice<T> slice(Slice<T> s) {
-	return s;
-}
-
-template<class T>
-Slice<T> slice(Slice<T> s, usize start, usize end) {
-	ensure(end <= s.len && end >= start, "Invalid slicing indices");
-	return Slice<T>{ &s.data[start], end - start };
-}
-
-template<class T>
-Slice<T> take(Slice<T> s, usize count) {
-	ensure(count <= s.len, "Cannot take more than slice length");
-	return Slice<T>{ s.data, s.count };
-}
-
-template<class T>
-Slice<T> skip(Slice<T> s, usize count) {
-	ensure(count <= s.len, "Cannot skip more than slice length");
-	return Slice<T>{ &s.data[count], s.len - count };
-}
 
 //// Memory
 constexpr usize mem_kilobyte = 1024ll;
@@ -121,30 +118,31 @@ struct Arena {
 	usize capacity;
 	void* last_allocation;
 	i32   region_count;
+
+	// Check if pointer is owned by arena
+	bool owns(void* p);
+
+	// Resize allocation in place, returns if it was successful
+	bool resize(void* ptr, usize new_size);
+
+	// Attempt to resize in place, otherwhise reallocate. Returns nullptr on failure
+	void* realloc(void* ptr, usize old_size, usize new_size, usize align);
+
+	// Allocate a block of memory from arena. Returns nullptr on failure
+	void* alloc(usize size, usize align);
+
+	// Reset arena, marking all allocations as free. This also ensures that there are not dangling regions.
+	void reset();
 };
+
+
+// Initialize an arena from a buffer
+Arena arena_from_buffer(Slice<u8> buf);
 
 struct ArenaRegion {
 	Arena* arena;
 	usize  offset;
 };
-
-// Initialize an arena from a buffer
-Arena arena_from_buffer(Slice<u8> buf);
-
-// Check if pointer is owned by arena
-bool arena_owns(Arena* a, void* p);
-
-// Resize allocation in place, returns if it was successful
-bool arena_resize(Arena* a, void* ptr, usize new_size);
-
-// Attempt to resize in place, otherwhise reallocate. Returns nullptr on failure
-void* arena_realloc(Arena* a, void* ptr, usize old_size, usize new_size, usize align);
-
-// Allocate a block of memory from arena. Returns nullptr on failure
-void* arena_alloc(Arena* a, usize size, usize align);
-
-// Reset arena, marking all allocations as free. This also ensures that there are not dangling regions.
-void arena_reset(Arena* a);
 
 // Begin a temporary arena region, serving as a "checkpoint"
 ArenaRegion arena_region_begin(Arena* a);
@@ -154,16 +152,15 @@ void arena_region_end(ArenaRegion reg);
 
 template<class T>
 T* make(Arena* a){
-	return (T*)arena_alloc(a, sizeof(T), alignof(T));
+	return (T*)a->alloc(sizeof(T), alignof(T));
 }
 
 template<class T>
 Slice<T> make_slice(Arena* a, usize n){
-	auto p = (T*)arena_alloc(a, sizeof(T) * n, alignof(T));
+	auto p = (T*)a->alloc(sizeof(T) * n, alignof(T));
 	if(!p){ return Slice<T>{}; }
 	return Slice<T>{p, n};
 }
-
 
 //// Dynamic Array
 template<class T>
@@ -186,7 +183,7 @@ struct List {
 
 template<class T>
 bool resize(List<T>* arr, usize new_cap){
-	T* new_data = (T*)arena_realloc(arr->arena, arr->data, arr->cap * sizeof(T), new_cap * sizeof(T), alignof(T));
+	T* new_data = (T*)arr->arena->realloc(arr->data, arr->cap * sizeof(T), new_cap * sizeof(T), alignof(T));
 	if(!new_data){
 		return false;
 	}
@@ -285,7 +282,7 @@ Slice<T> skip(List<T> const& s, usize count) {
 
 template<class T>
 List<T> make_list(Arena* a, usize len, usize cap){
-	auto p = (T*)arena_alloc(a, sizeof(T) * cap, alignof(T));
+	auto p = (T*)a->alloc(sizeof(T) * cap, alignof(T));
 	if(!p){ return List<T>{}; }
 	return List<T>{p, len, cap, a};
 }
@@ -300,6 +297,26 @@ List<T> make_list(Arena* a){
 struct String {
 	char const* data;
 	usize len;
+
+	String slice();
+
+	String slice(usize start, usize end);
+
+	String take(usize count);
+
+	String skip(usize count);
+
+	String clone(Arena* arena);
+
+	isize find(String sub, usize offset);
+
+	// bool starts_with(String pattern);
+
+	// bool ends_with(String pattern);
+
+	// String trim(String cutset);
+	// String trim_left(String cutset);
+	// String trim_right(String cutset);
 
 	u8 operator[](usize idx) const {
 		ensure(idx < len, "Out of bounds access");
@@ -329,13 +346,6 @@ struct String {
 	explicit String(Slice<u8> s) : data{(char const*)s.data}, len{s.len} {}
 };
 
-String slice(String s);
-
-String slice(String s, usize start, usize end);
-
-String take(String s, usize count);
-
-String skip(String s, usize count);
 
 // String str_repeat(String str, usize count, Arena* a){
 // 	String res = {0};
@@ -370,10 +380,9 @@ RuneEncoded rune_encode(rune r);
 
 RuneDecoded rune_decode(u8 const* buf, u32 buflen);
 
-String clone(Arena* arena, String s);
-
 cstring clone_to_cstring(String s, Arena* a);
 
 String arena_vprintf(Arena* arena, char const* fmt, va_list args);
 
 String arena_printf(Arena* arena, char const* fmt, ...);
+
