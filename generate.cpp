@@ -89,7 +89,7 @@ int main(){
 			if(i && (i % 8 == 0)){
 				sb.append("\n\t");
 			}
-			sb.append(arena_printf(&scratch_arena, "0x%04x,", u32(table.entries[i])));
+			sb.append(arena_printf(&scratch_arena, "0x%08x,", u32(table.entries[i])));
 		}
 		sb.append("\n};\n");
 
