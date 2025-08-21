@@ -163,12 +163,102 @@ Slice<T> make_slice(Arena* a, usize n){
 }
 
 //// Dynamic Array
+
+constexpr usize LIST_GROWTH_FACTOR = 150;
+
 template<class T>
 struct List {
 	T*     data;
 	usize  len;
 	usize  cap;
 	Arena* arena;
+
+	bool resize(usize new_cap){
+		T* new_data = (T*)this->arena->realloc(this->data, this->cap * sizeof(T), new_cap * sizeof(T), alignof(T));
+		if(!new_data){
+			return false;
+		}
+		this->data = new_data;
+		this->cap = new_cap;
+		this->len = min(this->len, new_cap);
+		return true;
+	}
+
+	bool append(T const& elem){
+		if(this->len >= this->cap){
+			usize new_cap = max<usize>(16, (this->len * LIST_GROWTH_FACTOR) / 100);
+			if(!resize(arr, new_cap)){
+				return false;
+			}
+		}
+
+		this->data[this->len] = elem;
+		this->len += 1;
+		return true;
+	}
+
+	bool pop(){
+		if(this->len == 0){
+			return false;
+		}
+
+		this->len -= 1;
+		return true;
+	}
+
+	bool pop(T* elem){
+		if(this->len == 0){
+			return false;
+		}
+
+		this->len -= 1;
+		*elem = this->data[this->len];
+		return true;
+	}
+
+	bool insert(T const& elem, usize idx){
+		ensure(idx <= this->len, "Out of bounds insertion");
+
+		if(this->len >= this->cap){
+			usize new_cap = max<usize>(16, (this->len * LIST_GROWTH_FACTOR) / 100);
+			if(!resize(arr, new_cap)){
+				return false;
+			}
+		}
+		mem_copy(&this->data[idx + 1], &this->data[idx], sizeof(T) * (this->len - idx));
+		this->data[idx] = elem;
+		this->len += 1;
+		return true;
+	}
+
+	bool remove(usize idx){
+		ensure(idx < this->len, "Out of bounds deletion");
+		if(this->len == 0){
+			return false;
+		}
+		mem_copy(&this->data[idx], &this->data[idx + 1], sizeof(T) * (this->len - idx));
+		arr->len -= 1;
+		return true;
+	}
+
+	Slice<T> slice() {
+		return Slice<T>{this->data, this->len};
+	}
+
+	Slice<T> slice(usize start, usize end) {
+		ensure(end <= this->len && end >= start, "Invalid slicing indices");
+		return Slice<T>{ &this->data[start], end - start };
+	}
+
+	Slice<T> take(usize count) {
+		ensure(count <= this->len, "Cannot take more than List length");
+		return Slice<T>{ this->data, this->count };
+	}
+
+	Slice<T> skip(usize count) {
+		ensure(count <= this->len, "Cannot skip more than slice length");
+		return Slice<T>{ &this->data[count], this->len - count };
+	}
 
 	T& operator[](usize idx) {
 		ensure(idx < len, "Out of bounds list access");
@@ -181,104 +271,6 @@ struct List {
 	}
 };
 
-template<class T>
-bool resize(List<T>* arr, usize new_cap){
-	T* new_data = (T*)arr->arena->realloc(arr->data, arr->cap * sizeof(T), new_cap * sizeof(T), alignof(T));
-	if(!new_data){
-		return false;
-	}
-	arr->data = new_data;
-	arr->cap = new_cap;
-	arr->len = min(arr->len, new_cap);
-	return true;
-}
-
-constexpr usize LIST_GROWTH_FACTOR = 150;
-
-template<class T>
-bool append(List<T>* arr, T const& elem){
-	if(arr->len >= arr->cap){
-		usize new_cap = max<usize>(16, (arr->len * LIST_GROWTH_FACTOR) / 100);
-		if(!resize(arr, new_cap)){
-			return false;
-		}
-	}
-
-	arr->data[arr->len] = elem;
-	arr->len += 1;
-	return true;
-}
-
-template<class T>
-bool pop(List<T>* arr){
-	if(arr->len == 0){
-		return false;
-	}
-
-	arr->len -= 1;
-	return true;
-}
-
-template<class T>
-bool pop(List<T>* arr, T* elem){
-	if(arr->len == 0){
-		return false;
-	}
-
-	arr->len -= 1;
-	*elem = arr->data[arr->len];
-	return true;
-}
-
-template<class T>
-bool insert(List<T>* arr, T const& elem, usize idx){
-	ensure(idx <= arr->len, "Out of bounds insertion");
-
-	if(arr->len >= arr->cap){
-		usize new_cap = max<usize>(16, (arr->len * LIST_GROWTH_FACTOR) / 100);
-		if(!resize(arr, new_cap)){
-			return false;
-		}
-	}
-	mem_copy(&arr->data[idx + 1], &arr->data[idx], sizeof(T) * (arr->len - idx));
-	arr->data[idx] = elem;
-	arr->len += 1;
-	return true;
-}
-
-template<class T>
-bool remove(List<T>* arr, usize idx){
-	ensure(idx < arr->len, "Out of bounds deletion");
-	if(arr->len == 0){
-		return false;
-	}
-	mem_copy(&arr->data[idx], &arr->data[idx + 1], sizeof(T) * (arr->len - idx));
-	arr->len -= 1;
-	return true;
-}
-
-template<class T>
-Slice<T> slice(List<T> const& s) {
-	return Slice<T>{s.data, s.len};
-}
-
-template<class T>
-Slice<T> slice(List<T> const& s, usize start, usize end) {
-	ensure(end <= s.len && end >= start, "Invalid slicing indices");
-	return Slice<T>{ &s.data[start], end - start };
-}
-
-template<class T>
-Slice<T> take(List<T> const& s, usize count) {
-	ensure(count <= s.len, "Cannot take more than List length");
-	return Slice<T>{ s.data, s.count };
-}
-
-template<class T>
-Slice<T> skip(List<T> const& s, usize count) {
-	ensure(count <= s.len, "Cannot skip more than slice length");
-	return Slice<T>{ &s.data[count], s.len - count };
-}
 
 template<class T>
 List<T> make_list(Arena* a, usize len, usize cap){
@@ -305,6 +297,8 @@ struct String {
 	String take(usize count);
 
 	String skip(usize count);
+
+	Slice<u8> raw_bytes();
 
 	String clone(Arena* arena);
 

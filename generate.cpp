@@ -42,7 +42,7 @@ struct StringBuilder {
 
 	bool append(String str){
 		if((this->buf.len + str.len) >= this->buf.cap){
-			if(!resize(&this->buf, max<usize>(16, this->buf.len + str.len))){
+			if(!this->buf.resize(max<usize>(16, this->buf.len + str.len))){
 				return false;
 			}
 		}
@@ -57,7 +57,7 @@ struct StringBuilder {
 	}
 
 	Slice<u8> bytes(){
-		return slice(this->buf);
+		return this->buf.slice();
 	}
 };
 

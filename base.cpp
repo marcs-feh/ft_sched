@@ -238,6 +238,10 @@ String String::clone(Arena* a){
 	return res;
 }
 
+Slice<u8> String::raw_bytes(){
+	return Slice<u8>{(u8*)this->data, this->len};
+}
+
 cstring clone_to_cstring(String s, Arena* a){
 	auto buf = make_slice<u8>(a, s.len + 1);
 	if(buf.data){
