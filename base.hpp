@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include <atomic>
 
 //// Basic types & Utilities
 using i8 = int8_t;
@@ -45,6 +46,9 @@ T clamp(T lo, T x, T hi){
 	return min(max(lo, x), hi);
 }
 
+template<class T>
+using Atomic = std::atomic<T>;
+
 //// Assertions
 [[noreturn]] void panic_ex(char const* msg, char const* filename, int line);
 
@@ -71,7 +75,7 @@ struct Slice {
 
 	Slice<T> take(usize count) {
 		ensure(count <= this->len, "Cannot take more than slice length");
-		return Slice<T>{ this->data, this->count };
+		return Slice<T>{ this->data, count };
 	}
 
 	Slice<T> skip(usize count) {
@@ -163,7 +167,6 @@ Slice<T> make_slice(Arena* a, usize n){
 }
 
 //// Dynamic Array
-
 constexpr usize LIST_GROWTH_FACTOR = 150;
 
 template<class T>
@@ -187,7 +190,7 @@ struct List {
 	bool append(T const& elem){
 		if(this->len >= this->cap){
 			usize new_cap = max<usize>(16, (this->len * LIST_GROWTH_FACTOR) / 100);
-			if(!resize(arr, new_cap)){
+			if(!this->resize(new_cap)){
 				return false;
 			}
 		}
@@ -221,7 +224,7 @@ struct List {
 
 		if(this->len >= this->cap){
 			usize new_cap = max<usize>(16, (this->len * LIST_GROWTH_FACTOR) / 100);
-			if(!resize(arr, new_cap)){
+			if(!this->resize(new_cap)){
 				return false;
 			}
 		}
@@ -237,7 +240,7 @@ struct List {
 			return false;
 		}
 		mem_copy(&this->data[idx], &this->data[idx + 1], sizeof(T) * (this->len - idx));
-		arr->len -= 1;
+		this->len -= 1;
 		return true;
 	}
 
@@ -252,7 +255,7 @@ struct List {
 
 	Slice<T> take(usize count) {
 		ensure(count <= this->len, "Cannot take more than List length");
-		return Slice<T>{ this->data, this->count };
+		return Slice<T>{ this->data, count };
 	}
 
 	Slice<T> skip(usize count) {
@@ -283,7 +286,6 @@ template<class T>
 List<T> make_list(Arena* a){
 	return List<T>{nullptr, 0, 0, a};
 }
-
 
 //// Strings
 struct String {
@@ -340,7 +342,6 @@ struct String {
 	explicit String(Slice<u8> s) : data{(char const*)s.data}, len{s.len} {}
 };
 
-
 // String str_repeat(String str, usize count, Arena* a){
 // 	String res = {0};
 // 	char* buf = arena_make(a, char, count * str.len);
@@ -379,4 +380,23 @@ cstring clone_to_cstring(String s, Arena* a);
 String arena_vprintf(Arena* arena, char const* fmt, va_list args);
 
 String arena_printf(Arena* arena, char const* fmt, ...);
+
+//// Spinlock
+struct Spinlock {
+	Atomic<bool> _state{0};
+
+	void lock();
+
+	void unlock();
+
+	bool try_lock();
+};
+
+//// SPSC Queue
+template<class T>
+struct SPSC_Queue {
+	Atomic<i32> read_pos;
+	Atomic<i32> write_pos;
+	List<T>     buf;
+};
 

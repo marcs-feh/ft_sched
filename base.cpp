@@ -417,8 +417,28 @@ String arena_printf(Arena* arena, char const* fmt, ...){
 }
 
 //// Heap
-extern "C"{
-	void* malloc(size_t);
-	void* realloc(void*, size_t);
-	void free(void*);
+// extern "C"{
+// 	void* malloc(size_t);
+// 	void* realloc(void*, size_t);
+// 	void free(void*);
+// }
+
+//// Spinlock
+void Spinlock::lock(){
+	while(1){
+		if(!this->_state.exchange(true, std::memory_order_acquire)){
+			break;
+		}
+		while(this->_state.load(std::memory_order_relaxed));
+	}
 }
+
+void Spinlock::unlock(){
+	this->_state.store(false, std::memory_order_release);
+}
+
+bool Spinlock::try_lock(){
+    return !_state.load(std::memory_order_relaxed)
+    	&& !_state.exchange(true, std::memory_order_acquire);
+}
+
