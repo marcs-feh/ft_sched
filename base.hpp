@@ -392,11 +392,14 @@ struct Spinlock {
 	bool try_lock();
 };
 
-//// SPSC Queue
+//// Sync Queue
 template<class T>
-struct SPSC_Queue {
-	Atomic<i32> read_pos;
-	Atomic<i32> write_pos;
-	List<T>     buf;
+struct SyncQueue {
+	T* data;
+	usize cap;
+	usize len;
+	usize offset;
+	Spinlock lock;
 };
+
 
