@@ -20,5 +20,10 @@ void print_list(List<T> const& list, char const* elem_fmt){
 }
 
 int main(){
-	String s = "Hello";
+	usize arena_size = 4 * mem_kilobyte;
+	u8* arena_data = new u8[arena_size];
+
+	Arena arena = arena_from_buffer({arena_data, arena_size});
+	
+	auto q = make_sync_queue<f32>(&arena, 64);
 }

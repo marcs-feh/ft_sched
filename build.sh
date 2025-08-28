@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 
 cc='clang++'
-cflags='-std=c++14 -fno-strict-aliasing -fwrapv -O0'
+cflags='-std=c++14 -fno-strict-aliasing -fwrapv -O0 -fsanitize=address'
 wflags='-Wall -Wextra -Werror=return-type -D_CRT_SECURE_NO_WARNINGS'
 
 set -eu

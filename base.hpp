@@ -132,7 +132,7 @@ struct Arena {
 	// Attempt to resize in place, otherwhise reallocate. Returns nullptr on failure
 	void* realloc(void* ptr, usize old_size, usize new_size, usize align);
 
-	// Allocate a block of memory from arena. Returns nullptr on failure
+	// Allocate a zeroed block of memory from arena. Returns nullptr on failure
 	void* alloc(usize size, usize align);
 
 	// Reset arena, marking all allocations as free. This also ensures that there are not dangling regions.
@@ -390,16 +390,162 @@ struct Spinlock {
 	void unlock();
 
 	bool try_lock();
+
+	template<typename F>
+	void scope(F&& fn){
+		this->lock();
+		fn();
+		this->unlock();
+	}
 };
 
-//// Sync Queue
+//// Queue
 template<class T>
-struct SyncQueue {
+struct Queue {
 	T* data;
 	usize cap;
 	usize len;
 	usize offset;
-	Spinlock lock;
+
+	usize space(){
+		return cap - len;
+	}
+
+	bool push_back(T const& elem){
+		if(this->space() == 0){
+			return false;
+		}
+
+		usize idx = (this->offset + this->len) % cap;
+		this->data[idx] = elem;
+		this->len += 1;
+		return true;
+	}
+
+	bool push_front(T const& elem){
+		if(this->space() == 0){
+			return false;
+		}
+
+		this->offset = (this->offset - 1 + this->data) % this->cap;
+		this->len += 1;
+		this->data[this->offset] = elem;
+
+		return true;
+	}
+
+	bool pop_back(){
+		if(this->len == 0){
+			return false;
+		}
+
+		this->len -= 1;
+
+		return true;
+	}
+
+	bool pop_back(T* out){
+		if(this->len == 0){
+			return false;
+		}
+
+		this->len -= 1;
+		usize idx = (this->offset + this->len) % this->cap;
+		*out = this->data[idx];
+
+		return true;
+	}
+
+	bool pop_front(){
+		if(this->len == 0){
+			return false;
+		}
+
+		this->offset = (this->offset + 1) % this->cap;
+		this->len -= 1;
+
+		return true;
+	}
+
+	bool pop_front(T* out){
+		if(this->len == 0){
+			return false;
+		}
+
+		*out = this->data[this->offset];
+		this->offset = (this->offset + 1) % this->cap;
+		this->len -= 1;
+		return true;
+	}
 };
+
+
+
+template<class T>
+struct SyncQueue {
+	Queue<T> inner{0};
+	Spinlock spinner{};
+
+	usize space(){
+		spinner.lock();
+		auto result = inner->space();
+		spinner.unlock();
+		return result;
+	}
+
+	bool push_back(T const& elem){
+		spinner.lock();
+		auto result = inner->push_back(elem);
+		spinner.unlock();
+		return result;
+	}
+
+	bool push_front(T const& elem){
+		spinner.lock();
+		auto result = inner->push_front(elem);
+		spinner.unlock();
+		return result;
+	}
+
+	bool pop_back(){
+		spinner.lock();
+		auto result = inner->pop_back();
+		spinner.unlock();
+		return result;
+	}
+
+	bool pop_back(T* out){
+		spinner.lock();
+		auto result = inner->pop_back(out);
+		spinner.unlock();
+		return result;
+	}
+
+	bool pop_front(){
+		spinner.lock();
+		auto result = inner->pop_front();
+		spinner.unlock();
+		return result;
+	}
+
+	bool pop_front(T* out){
+		spinner.lock();
+		auto result = inner->pop_front(out);
+		spinner.unlock();
+		return result;
+	}
+
+};
+
+template<class T>
+SyncQueue<T>* make_sync_queue(Arena* a, usize cap){
+	auto buf = make_slice<T>(a, cap);
+	auto queue = make<SyncQueue<T>>(a);
+
+	queue->inner.data = buf.data;
+	queue->inner.cap = cap;
+	return nullptr;
+}
+
 
 

@@ -154,6 +154,11 @@ void* Arena::realloc(void* ptr, usize old_size, usize new_size, usize align){
 		if(new_data == nullptr){ return nullptr; } /* Out of memory */
 		mem_copy(new_data, ptr, min(old_size, new_size));
 
+		if(new_size > old_size){
+			usize diff = new_size - old_size;
+			mem_zero((u8*)new_data + old_size, diff);
+		}
+
 		return new_data;
 	}
 }
