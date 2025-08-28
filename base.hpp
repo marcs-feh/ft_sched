@@ -479,8 +479,7 @@ struct Queue {
 	}
 };
 
-
-
+//// Sync Queue
 template<class T>
 struct SyncQueue {
 	Queue<T> inner{0};
@@ -534,7 +533,6 @@ struct SyncQueue {
 		spinner.unlock();
 		return result;
 	}
-
 };
 
 template<class T>
@@ -546,6 +544,3 @@ SyncQueue<T>* make_sync_queue(Arena* a, usize cap){
 	queue->inner.cap = cap;
 	return nullptr;
 }
-
-
-

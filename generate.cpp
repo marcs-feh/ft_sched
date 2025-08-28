@@ -97,7 +97,7 @@ int main(){
 		sb.append(base_impl);
 
 		i64 written = file_write("crc32.gen.cpp", sb.bytes());
-		printf("-> Generate crc32.gen.cpp (%.1g KiB)\n", f64(written) / f64(1024));
+		printf("-> Generated crc32.gen.cpp (%.1g KiB)\n", f64(written) / f64(1024));
 
 		ensure(written > 0, "Failed to write file");
 		scratch_arena.reset();
