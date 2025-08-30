@@ -154,9 +154,13 @@ ArenaRegion arena_region_begin(Arena* a);
 // End the region, restoring the arena state
 void arena_region_end(ArenaRegion reg);
 
-template<class T>
-T* make(Arena* a){
-	return (T*)a->alloc(sizeof(T), alignof(T));
+template<class T, typename ... Args>
+T* make(Arena* a, Args&& ... args){
+	T* p = (T*)a->alloc(sizeof(T), alignof(T));
+	if(p){
+		new (p) T(args...);
+	}
+	return p;
 }
 
 template<class T>
@@ -390,13 +394,6 @@ struct Spinlock {
 	void unlock();
 
 	bool try_lock();
-
-	template<typename F>
-	void scope(F&& fn){
-		this->lock();
-		fn();
-		this->unlock();
-	}
 };
 
 //// Queue
@@ -482,65 +479,67 @@ struct Queue {
 //// Sync Queue
 template<class T>
 struct SyncQueue {
-	Queue<T> inner{0};
+	Queue<T> inner{};
 	Spinlock spinner{};
 
 	usize space(){
 		spinner.lock();
-		auto result = inner->space();
+		auto result = this->inner.space();
 		spinner.unlock();
 		return result;
 	}
 
 	bool push_back(T const& elem){
 		spinner.lock();
-		auto result = inner->push_back(elem);
+		auto result = this->inner.push_back(elem);
 		spinner.unlock();
 		return result;
 	}
 
 	bool push_front(T const& elem){
 		spinner.lock();
-		auto result = inner->push_front(elem);
+		auto result = this->inner.push_front(elem);
 		spinner.unlock();
 		return result;
 	}
 
 	bool pop_back(){
 		spinner.lock();
-		auto result = inner->pop_back();
+		auto result = this->inner.pop_back();
 		spinner.unlock();
 		return result;
 	}
 
 	bool pop_back(T* out){
 		spinner.lock();
-		auto result = inner->pop_back(out);
+		auto result = this->inner.pop_back(out);
 		spinner.unlock();
 		return result;
 	}
 
 	bool pop_front(){
 		spinner.lock();
-		auto result = inner->pop_front();
+		auto result = this->inner.pop_front();
 		spinner.unlock();
 		return result;
 	}
 
 	bool pop_front(T* out){
 		spinner.lock();
-		auto result = inner->pop_front(out);
+		auto result = this->inner.pop_front(out);
 		spinner.unlock();
 		return result;
 	}
+
 };
 
 template<class T>
 SyncQueue<T>* make_sync_queue(Arena* a, usize cap){
-	auto buf = make_slice<T>(a, cap);
 	auto queue = make<SyncQueue<T>>(a);
+	auto buf = make_slice<T>(a, cap);
 
 	queue->inner.data = buf.data;
 	queue->inner.cap = cap;
-	return nullptr;
+	return queue;
 }
+
