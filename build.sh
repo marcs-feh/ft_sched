@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 
 cc='clang++'
-cflags='-std=c++14 -fno-strict-aliasing -fwrapv'
+cflags='-std=c++20 -fno-strict-aliasing -fwrapv -fno-exceptions -fno-rtti'
 wflags='-Wall -Wextra -Werror=return-type -D_CRT_SECURE_NO_WARNINGS'
 
 Run(){ echo "-> $@"; $@; }

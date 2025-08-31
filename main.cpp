@@ -2,6 +2,7 @@
 
 #include "ft_sched.hpp"
 #include "crc32.gen.cpp"
+#include <stdio.h>
 
 extern "C" {
 	int printf(char const*, ...);
@@ -85,23 +86,29 @@ enum TaskStatus : u16 {
 	Fault, // Or anthing above
 };
 
-// struct RawTask {
-// 	u32 id;
-// 	void* arg;
-// 	TaskFunc func;
-// };
+struct ITask {
+	virtual void run() = 0;
+
+	virtual ~ITask() = default;
+};
 
 template<typename Fn>
-struct Task {
+struct Task : ITask {
+	u32 id;
 	Arena* arena;
 	Fn body;
 
-	void run(){
+	void run() override {
 		body();
 	}
 
 	Task() = delete;
 	Task(Fn body) : body{body}{}
+
+	virtual ~Task(){
+		printf("[[Byeeee!]]\n");
+		fflush(stdout);
+	}
 };
 
 template<typename F>

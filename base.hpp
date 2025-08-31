@@ -154,19 +154,22 @@ ArenaRegion arena_region_begin(Arena* a);
 // End the region, restoring the arena state
 void arena_region_end(ArenaRegion reg);
 
-template<class T, typename ... Args>
+template<class T, typename ... Args> [[nodiscard]]
 T* make(Arena* a, Args&& ... args){
 	T* p = (T*)a->alloc(sizeof(T), alignof(T));
-	if(p){
-		new (p) T(args...);
-	}
+	if(!p){ return nullptr; }
+	new (p) T(args...);
 	return p;
 }
 
-template<class T>
+template<class T> [[nodiscard]]
 Slice<T> make_slice(Arena* a, usize n){
 	auto p = (T*)a->alloc(sizeof(T) * n, alignof(T));
 	if(!p){ return Slice<T>{}; }
+	// if constexpr(!IsTriviallyConstructible<T>)
+	for(usize i = 0; i < n; i++){
+		new (&p[i]) T();
+	}
 	return Slice<T>{p, n};
 }
 
@@ -279,14 +282,14 @@ struct List {
 };
 
 
-template<class T>
+template<class T> [[nodiscard]]
 List<T> make_list(Arena* a, usize len, usize cap){
 	auto p = (T*)a->alloc(sizeof(T) * cap, alignof(T));
 	if(!p){ return List<T>{}; }
 	return List<T>{p, len, cap, a};
 }
 
-template<class T>
+template<class T> [[nodiscard]]
 List<T> make_list(Arena* a){
 	return List<T>{nullptr, 0, 0, a};
 }
