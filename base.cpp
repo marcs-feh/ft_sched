@@ -14,7 +14,7 @@ usize cstring_len(cstring cs) {
 
 //// External dependencies
 extern "C"{
-	[[noreturn]] void abort();
+	void abort();
 	#include <stdio.h>
 }
 
@@ -26,6 +26,7 @@ void error_write(char const* msg){
 [[noreturn]] static inline
 void trap(){
 	abort();
+	for(;;);
 }
 
 //// Assertions
@@ -405,7 +406,7 @@ String arena_vprintf(Arena* arena, char const* fmt, va_list args){
 	void* base = (void*)((uintptr)arena->data + arena->offset);
 	usize size = arena->capacity - arena->offset;
 
-	int n = stbsp_vsnprintf((char*)base, size - 1, fmt, args);
+	int n = stbsp_vsnprintf((char*)base, (int)size - 1, fmt, args);
 	if(n > 0){
 		arena->offset += n + 1; /* Account for nullptr terminator */
 		return String((char const*)base, n);
