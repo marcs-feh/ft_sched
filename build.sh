@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 cc='g++'
-cflags='-std=c++20 -fno-strict-aliasing -fwrapv -fno-exceptions -fno-rtti -O0 -fsanitize=address'
+cflags='-std=c++20 -fno-exceptions -fno-rtti -fno-strict-aliasing -fwrapv'
 wflags='-Wall -Wextra -Werror=return-type -D_CRT_SECURE_NO_WARNINGS'
 
 Run(){ echo "-> $@"; $@; }
