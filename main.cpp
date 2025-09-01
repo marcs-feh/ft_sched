@@ -75,8 +75,6 @@ void print_list(List<T> const& list, char const* elem_fmt){
 	} printf("]\n");
 }
 
-using TaskFunc = void (*)(void*);
-
 enum TaskStatus : u16 {
 	Undefined = 0,
 	Initialized = 1,
@@ -86,16 +84,13 @@ enum TaskStatus : u16 {
 	Fault, // Or anthing above
 };
 
-struct ITask {
+struct Executable {
 	virtual void run() = 0;
-
-	virtual ~ITask() = default;
 };
 
 template<typename Fn>
-struct Task : ITask {
-	u32 id;
-	Arena* arena;
+struct Task : Executable {
+	TaskStatus status;
 	Fn body;
 
 	void run() override {
@@ -103,12 +98,7 @@ struct Task : ITask {
 	}
 
 	Task() = delete;
-	Task(Fn body) : body{body}{}
-
-	virtual ~Task(){
-		printf("[[Byeeee!]]\n");
-		fflush(stdout);
-	}
+	explicit Task(Fn body) : body{body}{}
 };
 
 template<typename F>
@@ -117,10 +107,9 @@ concept Action = requires(F f){
 };
 
 template<Action Fn> [[nodiscard]]
-Task<Fn>* make_task(Arena* a, Fn body){
+Executable* make_task(Arena* a, Fn body){
 	auto t = make<Task<Fn>>(a, body);
 	if(!t){ panic("Failed to create task"); }
-	t->arena = a;
 	return t;
 }
 
@@ -129,12 +118,12 @@ int main(){
 	u8* arena_data = new u8[arena_size];
 
 	Arena arena = arena_from_buffer({arena_data, arena_size});
-	
 	auto q = make_sync_queue<f32>(&arena, 64);
 
-	auto t = make_task(&arena, [=](){
+	auto t = make_task(&arena, [=]() {
 		printf("Hello %p\n", q);
 	});
-
 	t->run();
+
+	delete[] arena_data;
 }

@@ -3,7 +3,7 @@
 setlocal
 
 set cc=clang++
-set cflags=-std=c++20 -fno-strict-aliasing -fwrapv -O0
+set cflags=-std=c++20 -fno-exceptions -fno-rtti -fno-strict-aliasing -fwrapv -O0 -g
 set wflags=-Wall -Wextra -Werror=return-type -D_CRT_SECURE_NO_WARNINGS
 
 echo [Code generation]
