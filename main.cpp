@@ -3,24 +3,6 @@
 #include "ft_sched.hpp"
 #include "crc32.gen.cpp"
 #include <stdio.h>
-#include <time.h>
-
-extern "C" {
-	int printf(char const*, ...);
-}
-
-// - Task interface
-
-// template<typename T>
-// inline constexpr auto is_copy_constructible =
-// 	__is_constructible(T, AddLValueReference<const T>)
-// ;
-
-// template<typename T>
-// inline constexpr auto is_move_constructible =
-// 	__is_constructible(T, AddRValueReference<T>)
-// ;
-
 
 using Tick = i64;
 
@@ -82,8 +64,10 @@ struct Deadline {
 	}
 };
 
+constexpr static usize MAX_DEADLINES = 16;
+
 struct Watcher {
-	List<Deadline> deadlines;
+	SmallList<Deadline, MAX_DEADLINES> deadlines;
 };
 
 template<typename F>
@@ -99,10 +83,11 @@ Executable* make_task(Arena* a, Fn body){
 }
 
 Tick tick_current(){
-	struct timespec ts = {};
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	i64 now = (ts.tv_sec * 1000000000LL) + ts.tv_nsec;
-	return Tick(now);
+	// struct timespec ts = {};
+	// clock_gettime(CLOCK_MONOTONIC, &ts);
+	// i64 now = (ts.tv_sec * 1000000000LL) + ts.tv_nsec;
+	// return Tick(now);
+	return 0;
 }
 
 int main(){
