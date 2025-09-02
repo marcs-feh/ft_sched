@@ -1,5 +1,15 @@
 #pragma once
 
+//// Attributes and Compiler specifics
+#if defined(_MSC_VER)
+	#define attribute_force_inline __forceinline
+#elif defined(__clang__) || defined(__GNUC__)
+	#define attribute_force_inline __attribute__((always_inline))
+#else
+	#warning "Could not find force_inline attribute. This may degrade performance"
+	#define attribute_force_inline
+#endif
+
 #include <stddef.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -131,6 +141,20 @@ inline constexpr auto same_type<T, T> = true;
 template<typename A, typename B>
 concept SameAs = same_type<A, B>;
 
+template<typename T> attribute_force_inline constexpr
+RemoveReference<T>&& move(T&& arg) {
+	return static_cast<RemoveReference<T>&&>(arg);
+}
+
+template<typename T> constexpr
+T&& forward(RemoveReference<T>&& arg) {
+	return static_cast<T&&>(arg);
+}
+
+template<typename T> constexpr
+T&& forward(RemoveReference<T>& arg) {
+	return static_cast<T&&>(arg);
+}
 
 //// Assertions
 [[noreturn]] void panic_ex(char const* msg, char const* filename, int line);

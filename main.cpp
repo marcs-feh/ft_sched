@@ -102,7 +102,7 @@ struct Pool {
 		auto node = free_list_head;
 		node->next = nullptr;
 		free_list_head = node->next;
-		new (&node->data) T(forward<Args>(elem)...);
+		new (&node->data) T(forward<Args>(args)...);
 		return (T*)node;
 	}
 };
