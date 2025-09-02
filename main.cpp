@@ -3,58 +3,13 @@
 #include "ft_sched.hpp"
 #include "crc32.gen.cpp"
 #include <stdio.h>
+#include <time.h>
 
 extern "C" {
 	int printf(char const*, ...);
 }
 
 // - Task interface
-
-template<typename T>
-struct Identity { using Type = T; };
-
-template<typename T>
-concept Referenceable = requires {
-	typename Identity<T&>;
-};
-
-namespace detail {
-template<typename T> struct RemoveReferenceImpl      { using Type = T; };
-template<typename T> struct RemoveReferenceImpl<T&>  { using Type = T; };
-template<typename T> struct RemoveReferenceImpl<T&&> { using Type = T; };
-
-// Add references to types
-// NOTE: auto = ... evaluates to true or false, so we only add references to referenceable types
-template<typename T, auto = Referenceable<T>>
-struct AddLValueReferenceImpl { using Type = T; };
-
-template<typename T>
-struct AddLValueReferenceImpl<T, true> { using Type = T&; };
-
-template<typename T, auto = Referenceable<T>>
-struct AddRValueReferenceImpl { using Type = T; };
-
-template<typename T>
-struct AddRValueReferenceImpl<T, true> { using Type = T&&; };
-}
-
-template<typename T>
-using RemoveReference = typename detail::RemoveReferenceImpl<T>::Type;
-
-template<typename T>
-using AddLValueReference = typename detail::AddLValueReferenceImpl<T>::Type;
-
-template<typename T>
-using AddRValueReference = typename detail::AddRValueReferenceImpl<T>::Type;
-
-template<typename A, typename B>
-inline constexpr auto same_type = false;
-
-template<typename T>
-inline constexpr auto same_type<T, T> = true;
-
-template<typename A, typename B>
-concept SameAs = same_type<A, B>;
 
 // template<typename T>
 // inline constexpr auto is_copy_constructible =
@@ -66,11 +21,25 @@ concept SameAs = same_type<A, B>;
 // 	__is_constructible(T, AddRValueReference<T>)
 // ;
 
+
+using Tick = i64;
+
+using Duration = i64;
+
 template<class T>
 void print_list(List<T> const& list, char const* elem_fmt){
 	printf("len: %td cap: %td [ ", list.len, list.cap);
 	for(usize i = 0; i < list.len; i ++){
 		printf(elem_fmt, list[i]);
+		printf(" ");
+	} printf("]\n");
+}
+
+template<class T>
+void print_slice(Slice<T> slice, char const* elem_fmt){
+	printf("len: %td [ ", slice.len);
+	for(usize i = 0; i < slice.len; i ++){
+		printf(elem_fmt, slice[i]);
 		printf(" ");
 	} printf("]\n");
 }
@@ -88,10 +57,13 @@ struct Executable {
 	virtual void run() = 0;
 };
 
+Tick tick_current();
+
 template<typename Fn>
 struct Task : Executable {
 	TaskStatus status;
 	Fn body;
+	// Deadline* deadline;
 
 	void run() override {
 		body();
@@ -99,6 +71,19 @@ struct Task : Executable {
 
 	Task() = delete;
 	explicit Task(Fn body) : body{body}{}
+};
+
+struct Deadline {
+	Atomic<Tick> limit;
+	u32 duration;
+
+	void reset(){
+		limit.store(tick_current(), memory_order_relaxed);
+	}
+};
+
+struct Watcher {
+	List<Deadline> deadlines;
 };
 
 template<typename F>
@@ -113,17 +98,23 @@ Executable* make_task(Arena* a, Fn body){
 	return t;
 }
 
+Tick tick_current(){
+	struct timespec ts = {};
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	i64 now = (ts.tv_sec * 1000000000LL) + ts.tv_nsec;
+	return Tick(now);
+}
+
 int main(){
 	usize arena_size = 4 * mem_kilobyte;
 	u8* arena_data = new u8[arena_size];
 
 	Arena arena = arena_from_buffer({arena_data, arena_size});
-	auto q = make_sync_queue<f32>(&arena, 64);
 
-	auto t = make_task(&arena, [=]() {
-		printf("Hello %p\n", q);
-	});
-	t->run();
+	SmallList<i32, 30> nums;
+	nums.append(5);
+	nums.append(5);
+	print_slice(nums.slice(), "%d");
 
 	delete[] arena_data;
 }

@@ -49,6 +49,89 @@ T clamp(T lo, T x, T hi){
 template<class T>
 using Atomic = std::atomic<T>;
 
+constexpr auto memory_order_relaxed = std::memory_order_relaxed;
+constexpr auto memory_order_acquire = std::memory_order_acquire;
+constexpr auto memory_order_release = std::memory_order_release;
+constexpr auto memory_order_seq_cst = std::memory_order_seq_cst;
+// NOTE: `consume` memory order has been deliberately ommited due to being poorly specified
+
+using AtomicI8  = Atomic<i8>;
+using AtomicI16 = Atomic<i16>;
+using AtomicI32 = Atomic<i32>;
+using AtomicI64 = Atomic<i64>;
+
+using AtomicU8  = Atomic<u8>;
+using AtomicU16 = Atomic<u16>;
+using AtomicU32 = Atomic<u32>;
+using AtomicU64 = Atomic<u64>;
+
+using AtomicUsize = Atomic<usize>;
+using AtomicIsize = Atomic<isize>;
+
+using AtomicBool = Atomic<bool>;
+
+static_assert(AtomicI8::is_always_lock_free, "Expected i8 to be lock-free");
+static_assert(AtomicI16::is_always_lock_free, "Expected i16 to be lock-free");
+static_assert(AtomicI32::is_always_lock_free, "Expected i32 to be lock-free");
+static_assert(AtomicI64::is_always_lock_free, "Expected i64 to be lock-free");
+static_assert(AtomicU8::is_always_lock_free, "Expected u8 to be lock-free");
+static_assert(AtomicU16::is_always_lock_free, "Expected u16 to be lock-free");
+static_assert(AtomicU32::is_always_lock_free, "Expected u32 to be lock-free");
+static_assert(AtomicU64::is_always_lock_free, "Expected u64 to be lock-free");
+static_assert(AtomicUsize::is_always_lock_free, "Expected usize to be lock-free");
+static_assert(AtomicIsize::is_always_lock_free, "Expected isize to be lock-free");
+static_assert(AtomicBool::is_always_lock_free, "Expected bool to be lock-free");
+
+
+//// Type traits
+
+template<typename T>
+struct Identity { using Type = T; };
+
+template<typename T>
+concept Referenceable = requires {
+	typename Identity<T&>;
+};
+
+namespace detail {
+template<typename T> struct RemoveReferenceImpl      { using Type = T; };
+template<typename T> struct RemoveReferenceImpl<T&>  { using Type = T; };
+template<typename T> struct RemoveReferenceImpl<T&&> { using Type = T; };
+
+// Add references to types
+// NOTE: auto = ... evaluates to true or false, so we only add references to referenceable types
+template<typename T, auto = Referenceable<T>>
+struct AddLValueReferenceImpl { using Type = T; };
+
+template<typename T>
+struct AddLValueReferenceImpl<T, true> { using Type = T&; };
+
+template<typename T, auto = Referenceable<T>>
+struct AddRValueReferenceImpl { using Type = T; };
+
+template<typename T>
+struct AddRValueReferenceImpl<T, true> { using Type = T&&; };
+}
+
+template<typename T>
+using RemoveReference = typename detail::RemoveReferenceImpl<T>::Type;
+
+template<typename T>
+using AddLValueReference = typename detail::AddLValueReferenceImpl<T>::Type;
+
+template<typename T>
+using AddRValueReference = typename detail::AddRValueReferenceImpl<T>::Type;
+
+template<typename A, typename B>
+inline constexpr auto same_type = false;
+
+template<typename T>
+inline constexpr auto same_type<T, T> = true;
+
+template<typename A, typename B>
+concept SameAs = same_type<A, B>;
+
+
 //// Assertions
 [[noreturn]] void panic_ex(char const* msg, char const* filename, int line);
 
@@ -189,6 +272,7 @@ struct List {
 			return false;
 		}
 		this->data = new_data;
+		// TODO: construct newly created shit when newcap > len
 		this->cap = new_cap;
 		this->len = min(this->len, new_cap);
 		return true;
@@ -293,6 +377,105 @@ template<class T> [[nodiscard]]
 List<T> make_list(Arena* a){
 	return List<T>{nullptr, 0, 0, a};
 }
+
+//// Statically sized list
+template<class T, usize N>
+struct SmallList {
+	T      data[N]{};
+	usize  len = 0;
+
+	// bool resize(usize new_cap){
+	// 	if(new_cap <= N){
+	// 		if(new_cap > N){
+
+	// 		}
+	// 		this->len = min(this->len, new_cap);
+	// 	}
+	// 	return true;
+	// }
+
+	bool append(T const& elem){
+		if(this->len >= N){
+			return false;
+		}
+
+		this->data[this->len] = elem;
+		this->len += 1;
+		return true;
+	}
+
+	bool pop(){
+		if(this->len == 0){
+			return false;
+		}
+
+		this->len -= 1;
+		return true;
+	}
+
+	bool pop(T* elem){
+		if(this->len == 0){
+			return false;
+		}
+
+		this->len -= 1;
+		*elem = this->data[this->len];
+		return true;
+	}
+
+	bool insert(T const& elem, usize idx){
+		ensure(idx <= this->len, "Out of bounds insertion");
+
+		if(this->len >= N){
+			return false;
+		}
+		mem_copy(&this->data[idx + 1], &this->data[idx], sizeof(T) * (this->len - idx));
+		this->data[idx] = elem;
+		this->len += 1;
+		return true;
+	}
+
+	bool remove(usize idx){
+		ensure(idx < this->len, "Out of bounds deletion");
+		if(this->len == 0){
+			return false;
+		}
+		mem_copy(&this->data[idx], &this->data[idx + 1], sizeof(T) * (this->len - idx));
+		this->len -= 1;
+		return true;
+	}
+
+	Slice<T> slice() {
+		return Slice<T>{this->data, this->len};
+	}
+
+	Slice<T> slice(usize start, usize end) {
+		ensure(end <= this->len && end >= start, "Invalid slicing indices");
+		return Slice<T>{ &this->data[start], end - start };
+	}
+
+	Slice<T> take(usize count) {
+		ensure(count <= this->len, "Cannot take more than List length");
+		return Slice<T>{ this->data, count };
+	}
+
+	Slice<T> skip(usize count) {
+		ensure(count <= this->len, "Cannot skip more than slice length");
+		return Slice<T>{ &this->data[count], this->len - count };
+	}
+
+	T& operator[](usize idx) {
+		ensure(idx < len, "Out of bounds list access");
+		return data[idx];
+	}
+
+	T const& operator[](usize idx) const {
+		ensure(idx < len, "Out of bounds list access");
+		return data[idx];
+	}
+
+};
+
 
 //// Strings
 struct String {
@@ -545,4 +728,3 @@ SyncQueue<T>* make_sync_queue(Arena* a, usize cap){
 	queue->inner.cap = cap;
 	return queue;
 }
-
