@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-cc='g++'
+cc='clang++'
 cflags='-std=c++20 -fno-exceptions -fno-rtti -fno-strict-aliasing -fwrapv'
 wflags='-Wall -Wextra -Werror=return-type -D_CRT_SECURE_NO_WARNINGS'
 

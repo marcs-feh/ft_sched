@@ -1,6 +1,7 @@
 CC := clang++
 CFLAGS := -std=c++20 -fno-exceptions -fno-rtti -fno-strict-aliasing -fwrapv
 WFLAGS := -Wall -Wextra -Werror=return-type -D_CRT_SECURE_NO_WARNINGS
+OPTFLAGS := -O0
 LDFLAGS :=
 
 .PHONY: run clean
@@ -8,21 +9,13 @@ LDFLAGS :=
 all: ft_sched.exe
 	@./ft_sched.exe
 
-base.o: base.cpp base.hpp
-	$(CC) $(CFLAGS) $(WFLAGS) -c base.cpp -o base.o
+generate.exe: generate.cpp base.cpp base.hpp
+	# Code generation does not really need to be optimized
+	$(CC) $(CFLAGS) $(WFLAGS) -O0 -g generate.cpp base.cpp -o generate.exe $(LDFLAGS)
 
-generate.o: generate.cpp
-	$(CC) $(CFLAGS) $(WFLAGS) -c generate.cpp -o generate.o
-
-ft_sched.o: main.cpp generate.exe
+ft_sched.exe: main.cpp base.cpp base.hpp generate.exe
 	./generate.exe
-	$(CC) $(CFLAGS) $(WFLAGS) -c main.cpp -o ft_sched.o
-
-generate.exe: generate.o base.o
-	$(CC) generate.o base.o -o generate.exe $(LDFLAGS)
-
-ft_sched.exe: ft_sched.o base.o
-	$(CC) ft_sched.o base.o -o ft_sched.exe $(LDFLAGS)
+	$(CC) $(CFLAGS) $(OPTFLAGS) $(WFLAGS) main.cpp base.cpp -o ft_sched.exe $(LDFLAGS)
 
 clean:
 	rm -f *.o *.exe *.pdb *.ilk

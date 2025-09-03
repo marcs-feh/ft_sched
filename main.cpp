@@ -1,8 +1,9 @@
 #include "base.hpp"
 
 #include "ft_sched.hpp"
-#include "crc32.gen.cpp"
 #include <stdio.h>
+
+#include "crc32.gen.cpp"
 
 using Tick = i64;
 
@@ -150,6 +151,7 @@ int main(){
 	SmallList<i32, 30> nums;
 	nums.append(5);
 	nums.append(5);
+
 	print_slice(nums.slice(), "%d");
 
 	delete[] arena_data;
