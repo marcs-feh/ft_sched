@@ -27,7 +27,7 @@ void print_slice(Slice<T> slice, char const* elem_fmt){
 	} printf("]\n");
 }
 
-enum TaskStatus : u16 {
+enum TaskStatus : u8 {
 	Undefined = 0,
 	Initialized = 1,
 	Started = 2,
@@ -38,15 +38,15 @@ enum TaskStatus : u16 {
 
 struct Executable {
 	virtual void run() = 0;
+	virtual ~Executable() = 0;
 };
-
+	
 Tick tick_current();
 
 template<typename Fn>
 struct Task : Executable {
-	TaskStatus status;
+	Atomic<TaskStatus> status;
 	Fn body;
-	// Deadline* deadline;
 
 	void run() override {
 		body();
@@ -108,20 +108,6 @@ struct Pool {
 	}
 };
 
-// struct Watcher {
-// 	Spinlock lock;
-// 	SmallList<Deadline, MAX_DEADLINES> deadlines;
-
-// 	Deadline* new_deadline(u32 duration){
-// 		// auto now = tick_current();
-// 		// Deadline d = {
-// 		// 	.limit = now + duration,
-// 		// 	.duration = duration,
-// 		// };
-// 		// this->deadlines.append();
-// 	}
-// };
-
 template<typename F>
 concept Action = requires(F f){
 	{ f() } -> SameAs<void>;
@@ -135,10 +121,6 @@ Executable* make_task(Arena* a, Fn body){
 }
 
 Tick tick_current(){
-	// struct timespec ts = {};
-	// clock_gettime(CLOCK_MONOTONIC, &ts);
-	// i64 now = (ts.tv_sec * 1000000000LL) + ts.tv_nsec;
-	// return Tick(now);
 	return 0;
 }
 
@@ -148,11 +130,14 @@ int main(){
 
 	Arena arena = arena_from_buffer({arena_data, arena_size});
 
-	SmallList<i32, 30> nums;
-	nums.append(5);
-	nums.append(5);
+	auto running = make_list<Executable>(&arena);
 
-	print_slice(nums.slice(), "%d");
+	// SmallList<i32, 30> nums;
+	// nums.insert(69, 0);
+	// nums.append(5);
+	// nums.append(5);
+
+	// print_slice(nums.slice(), "%d");
 
 	delete[] arena_data;
 }

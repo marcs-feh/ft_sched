@@ -310,7 +310,7 @@ struct List {
 			}
 		}
 
-		this->data[this->len] = elem;
+		new (&this->data[this->len]) T(elem);
 		this->len += 1;
 		return true;
 	}
@@ -320,6 +320,7 @@ struct List {
 			return false;
 		}
 
+		this->data[this->len - 1].~T();
 		this->len -= 1;
 		return true;
 	}
@@ -330,7 +331,7 @@ struct List {
 		}
 
 		this->len -= 1;
-		*elem = this->data[this->len];
+		*elem = ::move(this->data[this->len]);
 		return true;
 	}
 
@@ -343,8 +344,9 @@ struct List {
 				return false;
 			}
 		}
+
 		mem_copy(&this->data[idx + 1], &this->data[idx], sizeof(T) * (this->len - idx));
-		this->data[idx] = elem;
+		new (&this->data[idx]) T(elem);
 		this->len += 1;
 		return true;
 	}
@@ -354,6 +356,9 @@ struct List {
 		if(this->len == 0){
 			return false;
 		}
+
+		this->data[idx].~T();
+
 		mem_copy(&this->data[idx], &this->data[idx + 1], sizeof(T) * (this->len - idx));
 		this->len -= 1;
 		return true;
@@ -386,6 +391,17 @@ struct List {
 	T const& operator[](usize idx) const {
 		ensure(idx < len, "Out of bounds list access");
 		return data[idx];
+	}
+
+	void clear(){
+		for(usize i = 0; i < this->len; i += 1){
+			this->data[i].~T();
+		}
+		this->len = 0;
+	}
+
+	~List(){
+		clear();
 	}
 };
 
@@ -403,102 +419,102 @@ List<T> make_list(Arena* a){
 }
 
 //// Statically sized list
-template<class T, usize N>
-struct SmallList {
-	T      data[N]{};
-	usize  len = 0;
+// template<class T, usize N>
+// struct SmallList {
+// 	T      data[N]{};
+// 	usize  len = 0;
 
-	// bool resize(usize new_cap){
-	// 	if(new_cap <= N){
-	// 		if(new_cap > N){
+// 	// bool resize(usize new_cap){
+// 	// 	if(new_cap <= N){
+// 	// 		if(new_cap > N){
 
-	// 		}
-	// 		this->len = min(this->len, new_cap);
-	// 	}
-	// 	return true;
-	// }
+// 	// 		}
+// 	// 		this->len = min(this->len, new_cap);
+// 	// 	}
+// 	// 	return true;
+// 	// }
 
-	bool append(T const& elem){
-		if(this->len >= N){
-			return false;
-		}
+// 	bool append(T const& elem){
+// 		if(this->len >= N){
+// 			return false;
+// 		}
 
-		this->data[this->len] = elem;
-		this->len += 1;
-		return true;
-	}
+// 		this->data[this->len] = elem;
+// 		this->len += 1;
+// 		return true;
+// 	}
 
-	bool pop(){
-		if(this->len == 0){
-			return false;
-		}
+// 	bool pop(){
+// 		if(this->len == 0){
+// 			return false;
+// 		}
 
-		this->len -= 1;
-		return true;
-	}
+// 		this->len -= 1;
+// 		return true;
+// 	}
 
-	bool pop(T* elem){
-		if(this->len == 0){
-			return false;
-		}
+// 	bool pop(T* elem){
+// 		if(this->len == 0){
+// 			return false;
+// 		}
 
-		this->len -= 1;
-		*elem = this->data[this->len];
-		return true;
-	}
+// 		this->len -= 1;
+// 		*elem = this->data[this->len];
+// 		return true;
+// 	}
 
-	bool insert(T const& elem, usize idx){
-		ensure(idx <= this->len, "Out of bounds insertion");
+// 	bool insert(T const& elem, usize idx){
+// 		ensure(idx <= this->len, "Out of bounds insertion");
 
-		if(this->len >= N){
-			return false;
-		}
-		mem_copy(&this->data[idx + 1], &this->data[idx], sizeof(T) * (this->len - idx));
-		this->data[idx] = elem;
-		this->len += 1;
-		return true;
-	}
+// 		if(this->len >= N){
+// 			return false;
+// 		}
+// 		mem_copy(&this->data[idx + 1], &this->data[idx], sizeof(T) * (this->len - idx));
 
-	bool remove(usize idx){
-		ensure(idx < this->len, "Out of bounds deletion");
-		if(this->len == 0){
-			return false;
-		}
-		mem_copy(&this->data[idx], &this->data[idx + 1], sizeof(T) * (this->len - idx));
-		this->len -= 1;
-		return true;
-	}
+// 		new (&this->data[this->len]) T(elem);
+// 		this->len += 1;
+// 		return true;
+// 	}
 
-	Slice<T> slice() {
-		return Slice<T>{this->data, this->len};
-	}
+// 	bool remove(usize idx){
+// 		ensure(idx < this->len, "Out of bounds deletion");
+// 		if(this->len == 0){
+// 			return false;
+// 		}
+// 		mem_copy(&this->data[idx], &this->data[idx + 1], sizeof(T) * (this->len - idx));
+// 		this->len -= 1;
+// 		return true;
+// 	}
 
-	Slice<T> slice(usize start, usize end) {
-		ensure(end <= this->len && end >= start, "Invalid slicing indices");
-		return Slice<T>{ &this->data[start], end - start };
-	}
+// 	Slice<T> slice() {
+// 		return Slice<T>{this->data, this->len};
+// 	}
 
-	Slice<T> take(usize count) {
-		ensure(count <= this->len, "Cannot take more than List length");
-		return Slice<T>{ this->data, count };
-	}
+// 	Slice<T> slice(usize start, usize end) {
+// 		ensure(end <= this->len && end >= start, "Invalid slicing indices");
+// 		return Slice<T>{ &this->data[start], end - start };
+// 	}
 
-	Slice<T> skip(usize count) {
-		ensure(count <= this->len, "Cannot skip more than slice length");
-		return Slice<T>{ &this->data[count], this->len - count };
-	}
+// 	Slice<T> take(usize count) {
+// 		ensure(count <= this->len, "Cannot take more than List length");
+// 		return Slice<T>{ this->data, count };
+// 	}
 
-	T& operator[](usize idx) {
-		ensure(idx < len, "Out of bounds list access");
-		return data[idx];
-	}
+// 	Slice<T> skip(usize count) {
+// 		ensure(count <= this->len, "Cannot skip more than slice length");
+// 		return Slice<T>{ &this->data[count], this->len - count };
+// 	}
 
-	T const& operator[](usize idx) const {
-		ensure(idx < len, "Out of bounds list access");
-		return data[idx];
-	}
+// 	T& operator[](usize idx) {
+// 		ensure(idx < len, "Out of bounds list access");
+// 		return data[idx];
+// 	}
 
-};
+// 	T const& operator[](usize idx) const {
+// 		ensure(idx < len, "Out of bounds list access");
+// 		return data[idx];
+// 	}
+// };
 
 
 //// Strings
