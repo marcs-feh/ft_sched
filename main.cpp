@@ -38,7 +38,7 @@ enum TaskStatus : u8 {
 
 struct Executable {
 	virtual void run() = 0;
-	virtual ~Executable() = 0;
+	virtual ~Executable(){}
 };
 	
 Tick tick_current();
@@ -54,6 +54,8 @@ struct Task : Executable {
 
 	Task() = delete;
 	explicit Task(Fn body) : body{body}{}
+
+	~Task(){}
 };
 
 struct Deadline {
@@ -130,14 +132,23 @@ int main(){
 
 	Arena arena = arena_from_buffer({arena_data, arena_size});
 
-	auto running = make_list<Executable>(&arena);
+	auto runnables = make_list<Executable*>(&arena);
+	int x = 0;
+	runnables.append(make_task(&arena, [](){
+		printf("Hello A\n");
+	}));
+	runnables.append(make_task(&arena, [&x](){
+		x += 5;
+		printf("Hello B %d\n", x);
+	}));
+	runnables.append(make_task(&arena, [](){
+		printf("Hello C\n");
+	}));
 
-	// SmallList<i32, 30> nums;
-	// nums.insert(69, 0);
-	// nums.append(5);
-	// nums.append(5);
+	for(usize i = 0; i < runnables.len; i += 1){
+		runnables[i]->run();
+	}
 
-	// print_slice(nums.slice(), "%d");
 
 	delete[] arena_data;
 }
