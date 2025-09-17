@@ -28,103 +28,119 @@ void print_slice(Slice<T> slice, char const* elem_fmt){
 }
 
 enum TaskStatus : u8 {
-	Undefined = 0,
-	Initialized = 1,
-	Started = 2,
-	Done = 3,
+	TaskStatus_Undefined = 0,
+	TaskStatus_Initialized = 1,
+	TaskStatus_Started = 2,
+	TaskStatus_Done = 3,
 
-	Fault, // Or anthing above
+	TaskStatus_Fault, // Or anthing above
 };
 
 struct Executable {
 	virtual void run() = 0;
+	virtual TaskStatus status() = 0;
+	virtual void fault() = 0;
 	virtual ~Executable(){}
 };
-	
-Tick tick_current();
 
-template<typename Fn>
+template<typename F>
+concept TaskBody = requires(F f, Executable* e){
+	{ f(e) } -> SameAs<void>;
+};
+	
+template<TaskBody Fn>
 struct Task : Executable {
-	Atomic<TaskStatus> status;
+	Atomic<TaskStatus> _status = TaskStatus_Undefined;
 	Fn body;
 
 	void run() override {
-		body();
+		_status.store(TaskStatus_Started);
+		body(this);
+		TaskStatus expected = TaskStatus_Started;
+		if(!_status.compare_exchange_strong(expected, TaskStatus_Done, memory_order_seq_cst, memory_order_relaxed)){
+			_status.store(TaskStatus_Fault);
+		}
+	}
+
+	TaskStatus status() override {
+		return _status;
+	}
+
+	void fault() override {
+		_status.store(TaskStatus_Fault);
 	}
 
 	Task() = delete;
-	explicit Task(Fn body) : body{body}{}
+
+	explicit Task(Fn body) : body{body}{
+		_status.store(TaskStatus_Initialized);
+	}
 
 	~Task(){}
 };
 
-struct Deadline {
-	Atomic<Tick> limit;
-	u32 duration;
-
-	void reset(){
-		limit.store(tick_current(), memory_order_relaxed);
-	}
-};
-
-constexpr static usize MAX_DEADLINES = 16;
-
-template<class T>
-struct Pool {
-	// IMPORTANT: Data MUST be the first member.
-	struct Node { T data; Node* next; };
-
-	Slice<Node> data = {};
-	Node* free_list_head = nullptr;
-
-	void clear(){
-		this->free_list_head = nullptr;
-		mem_zero(data.data, data.len * sizeof(data[0]));
-
-		for(usize i = 0; i < this->data.len; i++){
-			data[i].next = this->free_list_head;
-			this->free_list_head = data[i];
-		}
-	}
-
-	void destroy(T* elem){
-		if(!elem){ return; }
-		ensure((elem >= this->data.data) && (elem < this->data.data + this->data.len), "Element does not belong to collection");
-		elem->~T();
-		auto node = (Node*)elem; // IMPORTANT: Only possible because the layout of Node has data at the start!
-		mem_zero(&node->data, sizeof(node->data));
-		node->next = free_list_head;
-		free_list_head = node;
-	}
-
-	template<typename ...Args>
-	T* create(Args&& ... args){
-		if(!free_list_head){
-			return nullptr;
-		}
-		auto node = free_list_head;
-		node->next = nullptr;
-		free_list_head = node->next;
-		new (&node->data) T(forward<Args>(args)...);
-		return (T*)node;
-	}
-};
-
-template<typename F>
-concept Action = requires(F f){
-	{ f() } -> SameAs<void>;
-};
-
-template<Action Fn> [[nodiscard]]
+template<TaskBody Fn> [[nodiscard]]
 Executable* make_task(Arena* a, Fn body){
 	auto t = make<Task<Fn>>(a, body);
 	if(!t){ panic("Failed to create task"); }
 	return t;
 }
 
-Tick tick_current(){
-	return 0;
-}
+// struct Deadline {
+// 	Atomic<Tick> limit;
+// 	u32 duration;
+
+// 	void reset(){
+// 		limit.store(tick_current(), memory_order_relaxed);
+// 	}
+// };
+
+// constexpr static usize MAX_DEADLINES = 16;
+
+// template<class T>
+// struct Pool {
+// 	// IMPORTANT: Data MUST be the first member.
+// 	struct Node { T data; Node* next; };
+
+// 	Slice<Node> data = {};
+// 	Node* free_list_head = nullptr;
+
+// 	void clear(){
+// 		this->free_list_head = nullptr;
+// 		mem_zero(data.data, data.len * sizeof(data[0]));
+
+// 		for(usize i = 0; i < this->data.len; i++){
+// 			data[i].next = this->free_list_head;
+// 			this->free_list_head = data[i];
+// 		}
+// 	}
+
+// 	void destroy(T* elem){
+// 		if(!elem){ return; }
+// 		ensure((elem >= this->data.data) && (elem < this->data.data + this->data.len), "Element does not belong to collection");
+// 		elem->~T();
+// 		auto node = (Node*)elem; // IMPORTANT: Only possible because the layout of Node has data at the start!
+// 		mem_zero(&node->data, sizeof(node->data));
+// 		node->next = free_list_head;
+// 		free_list_head = node;
+// 	}
+
+// 	template<typename ...Args>
+// 	T* create(Args&& ... args){
+// 		if(!free_list_head){
+// 			return nullptr;
+// 		}
+// 		auto node = free_list_head;
+// 		node->next = nullptr;
+// 		free_list_head = node->next;
+// 		new (&node->data) T(forward<Args>(args)...);
+// 		return (T*)node;
+// 	}
+// };
+
+// Tick tick_current(){
+// 	return 0;
+// }
 
 int main(){
 	usize arena_size = 4 * mem_kilobyte;
@@ -134,19 +150,27 @@ int main(){
 
 	auto runnables = make_list<Executable*>(&arena);
 	int x = 0;
-	runnables.append(make_task(&arena, [](){
+	runnables.append(make_task(&arena, [](Executable*){
 		printf("Hello A\n");
 	}));
-	runnables.append(make_task(&arena, [&x](){
+	runnables.append(make_task(&arena, [&x](Executable*){
 		x += 5;
 		printf("Hello B %d\n", x);
 	}));
-	runnables.append(make_task(&arena, [](){
+	runnables.append(make_task(&arena, [](Executable* t){
 		printf("Hello C\n");
 	}));
 
 	for(usize i = 0; i < runnables.len; i += 1){
 		runnables[i]->run();
+	}
+
+	fflush(stdout);
+
+	for(usize i = 0; i < runnables.len; i += 1){
+		if(runnables[i]->status() == TaskStatus_Fault){
+			panic("FAULTED");
+		}
 	}
 
 
