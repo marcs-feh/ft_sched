@@ -269,6 +269,12 @@ T* make(Arena* a, Args&& ... args){
 	return p;
 }
 
+template<class T, typename ... Args> [[nodiscard]]
+T* make_uninitialized(Arena* a){
+	T* p = (T*)a->alloc(sizeof(T), alignof(T));
+	return p;
+}
+
 template<class T> [[nodiscard]]
 Slice<T> make_slice(Arena* a, usize n){
 	auto p = (T*)a->alloc(sizeof(T) * n, alignof(T));

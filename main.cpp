@@ -1,6 +1,7 @@
 #include "base.hpp"
 
 #include "ft_sched.hpp"
+#include "task.hpp"
 #include <stdio.h>
 
 #include "crc32.gen.cpp"
@@ -27,62 +28,10 @@ void print_slice(Slice<T> slice, char const* elem_fmt){
 	} printf("]\n");
 }
 
-enum TaskStatus : u8 {
-	TaskStatus_Undefined = 0,
-	TaskStatus_Initialized = 1,
-	TaskStatus_Started = 2,
-	TaskStatus_Done = 3,
-
-	TaskStatus_Fault, // Or anthing above
-};
-
-struct Executable {
-	virtual void run() = 0;
-	virtual TaskStatus status() = 0;
-	virtual void fault() = 0;
-	virtual ~Executable(){}
-};
-
-template<typename F>
-concept TaskBody = requires(F f, Executable* e){
-	{ f(e) } -> SameAs<void>;
-};
-	
-template<TaskBody Fn>
-struct Task : Executable {
-	Atomic<TaskStatus> _status = TaskStatus_Undefined;
-	Fn body;
-
-	void run() override {
-		_status.store(TaskStatus_Started);
-		body(this);
-		TaskStatus expected = TaskStatus_Started;
-		if(!_status.compare_exchange_strong(expected, TaskStatus_Done, memory_order_seq_cst, memory_order_relaxed)){
-			_status.store(TaskStatus_Fault);
-		}
-	}
-
-	TaskStatus status() override {
-		return _status;
-	}
-
-	void fault() override {
-		_status.store(TaskStatus_Fault);
-	}
-
-	Task() = delete;
-
-	explicit Task(Fn body) : body{body}{
-		_status.store(TaskStatus_Initialized);
-	}
-
-	~Task(){}
-};
 
 template<TaskBody Fn> [[nodiscard]]
 Executable* make_task(Arena* a, Fn body){
 	auto t = make<Task<Fn>>(a, body);
-	if(!t){ panic("Failed to create task"); }
 	return t;
 }
 
@@ -150,16 +99,17 @@ int main(){
 
 	auto runnables = make_list<Executable*>(&arena);
 	int x = 0;
-	runnables.append(make_task(&arena, [](Executable*){
-		printf("Hello A\n");
-	}));
-	runnables.append(make_task(&arena, [&x](Executable*){
-		x += 5;
-		printf("Hello B %d\n", x);
-	}));
-	runnables.append(make_task(&arena, [](Executable* t){
-		printf("Hello C\n");
-	}));
+	
+	// runnables.append(make_task(&arena, [](Executable*){
+	// 	printf("Hello A\n");
+	// }));
+	// runnables.append(make_task(&arena, [&x](Executable*){
+	// 	x += 5;
+	// 	printf("Hello B %d\n", x);
+	// }));
+	// runnables.append(make_task(&arena, [](Executable* t){
+	// 	printf("Hello C\n");
+	// }));
 
 	for(usize i = 0; i < runnables.len; i += 1){
 		runnables[i]->run();
@@ -172,7 +122,6 @@ int main(){
 			panic("FAULTED");
 		}
 	}
-
 
 	delete[] arena_data;
 }
