@@ -15,5 +15,5 @@ Run $cc $cflags $wflags generate.cpp base.cpp -o generate.exe
 ./generate.exe
 
 echo [Compile]
-Run $cc $cflags $wflags main.cpp base.cpp -o ft_sched.exe
+Run $cc $cflags $wflags main.cpp base.cpp task_linux.cpp -o ft_sched.exe
 ./ft_sched.exe
