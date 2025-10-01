@@ -93,6 +93,8 @@ static_assert(AtomicIsize::is_always_lock_free, "Expected isize to be lock-free"
 static_assert(AtomicBool::is_always_lock_free, "Expected bool to be lock-free");
 
 
+
+
 //// Type traits
 
 template<typename T>
@@ -155,6 +157,30 @@ template<typename T> constexpr
 T&& forward(RemoveReference<T>& arg) {
 	return static_cast<T&&>(arg);
 }
+
+//// Defer
+namespace defer_detail {
+template<typename F>
+struct DeferredCall {
+	F f;
+
+	attribute_force_inline DeferredCall(F&& f) : f(move(f)){}
+	
+	attribute_force_inline ~DeferredCall(){ f(); }
+};
+
+template<typename F> attribute_force_inline
+auto make_deferred(F&& f){
+	return DeferredCall<F>(forward<F>(f));
+}
+
+#define DEFER_GLUE0(X, Y) X##Y
+#define DEFER_GLUE1(X, Y) DEFER_GLUE0(X, Y)
+#define DEFER_GLUE2(X, Y) DEFER_GLUE1(X, Y)
+#define DEFER_COUNTER(X)  DEFER_GLUE2(X, __COUNTER__)
+}
+
+#define defer(STMT) auto DEFER_COUNTER(_defer_expr_) = ::defer_detail::make_deferred([&](){ STMT; })
 
 //// Assertions
 [[noreturn]] void panic_ex(char const* msg, char const* filename, int line);

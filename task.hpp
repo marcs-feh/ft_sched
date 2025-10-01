@@ -43,13 +43,14 @@ using RawTaskFunc = void (*)(RawTask* t);
 struct RawTask : Task {
 	RawTaskFunc func;
 	Arena* arena;
+	// usize arena_offset;
 	void* args;
 	void* result;
 	Atomic<TaskStatus> _status = TaskStatus_Undefined;
 	RawTaskPlatformSpecificData _specific{};
 
 	void run() override {
-		_init_platform_specific();
+		_run();
 	}
 
 	TaskStatus status() override {
@@ -61,15 +62,15 @@ struct RawTask : Task {
 	}
 	
 	void drop(){
-		_finish_platform_specific();
+		_drop();
 	}
 
 	~RawTask(){
 		drop();
 	}
 
-	void _init_platform_specific();
-	void _finish_platform_specific();
+	void _run();
+	void _drop();
 };
 
 RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args);

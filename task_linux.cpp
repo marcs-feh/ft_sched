@@ -1,4 +1,4 @@
-#define _DEFAULT_SOURCE/
+#define _DEFAULT_SOURCE
 #include <pthread.h>
 #include <semaphore.h>
 
@@ -19,13 +19,13 @@ void* task_linux_wrapper(void* task_ptr){
 	return NULL;
 }
 
-void RawTask::_init_platform_specific(){
+void RawTask::_run(){
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 	auto ok = pthread_create(&specific->handle, nullptr, task_linux_wrapper, (void*)this) == 0;
 	ensure(ok, "Failed to create thread");
 }
 
-void RawTask::_finish_platform_specific(){
+void RawTask::_drop(){
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 	pthread_join(specific->handle, NULL);
 

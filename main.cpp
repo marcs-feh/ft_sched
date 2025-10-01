@@ -44,13 +44,14 @@ int main(){
 	u8* arena_data = new u8[arena_size];
 
 	Arena arena = arena_from_buffer({arena_data, arena_size});
+	defer(printf("deferred hello!\n"));
 
 	auto runnables = make_list<Task*>(&arena);
 
 	auto task = make_raw_task(&arena, somebody, nullptr);
+	defer(task->drop());
 
 	task->run();
 
-	task->drop();
 }
 
