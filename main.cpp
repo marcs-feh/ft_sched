@@ -48,10 +48,19 @@ int main(){
 
 	auto runnables = make_list<Task*>(&arena);
 
-	auto task = make_raw_task(&arena, somebody, nullptr);
-	defer(task->drop());
+	for(usize i = 0; i < 20; i++){
+		auto task = make_raw_task(&arena, somebody, nullptr);
+		printf("Add: %p\n", task);
+		runnables.append(task);
+	}
 
-	task->run();
+	for(usize i = 0; i < runnables.len; i++){
+		runnables[i]->run();
+	}
+
+	for(usize i = 0; i < runnables.len; i++){
+		runnables[i]->join();
+	}
 
 }
 

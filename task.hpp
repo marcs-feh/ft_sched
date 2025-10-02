@@ -12,6 +12,7 @@ enum TaskStatus : u8 {
 struct Task {
 	virtual void run() = 0;
 	virtual TaskStatus status() = 0;
+	virtual void join() = 0;
 	virtual void fault() = 0;
 
 	virtual ~Task(){}
@@ -41,16 +42,15 @@ using RawTaskFunc = void (*)(RawTask* t);
 #endif
 
 struct RawTask : Task {
-	RawTaskFunc func;
-	Arena* arena;
-	// usize arena_offset;
-	void* args;
-	void* result;
-	Atomic<TaskStatus> _status = TaskStatus_Undefined;
+	RawTaskFunc func = nullptr;
+	Arena* arena = nullptr;
+	void* args = nullptr;
+	void* result = nullptr;
+	Atomic<TaskStatus> _status = TaskStatus_Initialized;
 	RawTaskPlatformSpecificData _specific{};
 
 	void run() override {
-		_run();
+		_init_specifics_and_run();
 	}
 
 	TaskStatus status() override {
@@ -60,20 +60,25 @@ struct RawTask : Task {
 	void fault() override {
 		_status.store(TaskStatus_Fault);
 	}
+
+	void join() override {
+	}
 	
 	void drop(){
-		_drop();
+		_join_and_deinit_specifics();
 	}
 
 	~RawTask(){
 		drop();
 	}
 
-	void _run();
-	void _drop();
+	void _init_specifics_and_run();
+	void _join_and_deinit_specifics();
 };
 
-RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args);
+constexpr usize default_argument_alignment = alignof(void*) * 2;
+
+RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args);//, usize args_size, usize args_align = default_argument_alignment);
 
 /// Task object that is a thin wrapper over a regular function
 // template<TaskBody Fn>

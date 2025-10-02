@@ -19,13 +19,16 @@ void* task_linux_wrapper(void* task_ptr){
 	return NULL;
 }
 
-void RawTask::_run(){
+void RawTask::_init_specifics_and_run(){
+	ensure(_status.load() == TaskStatus_Initialized, "Invalid task status");
+
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 	auto ok = pthread_create(&specific->handle, nullptr, task_linux_wrapper, (void*)this) == 0;
+
 	ensure(ok, "Failed to create thread");
 }
 
-void RawTask::_drop(){
+void RawTask::_join_and_deinit_specifics(){
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 	pthread_join(specific->handle, NULL);
 
@@ -33,13 +36,14 @@ void RawTask::_drop(){
 	ensure(status == TaskStatus_Fault || status == TaskStatus_Done, "Invalid task status");
 }
 
-// TODO: Maybe copy args into arena
+// TODO: Maybe copy args into arena?
 RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args){
 	auto raw_task = make<RawTask>(a);
-	if(raw_task){
+	if(raw_task != nullptr){
 		raw_task->func = func;
 		raw_task->arena = a;
 		raw_task->args = args;
+		raw_task->_status.store(TaskStatus_Initialized);
 	}
 	return raw_task;
 }
