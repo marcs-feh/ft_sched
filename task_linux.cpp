@@ -36,17 +36,5 @@ void RawTask::_join_and_deinit_specifics(){
 	ensure(status == TaskStatus_Fault || status == TaskStatus_Done, "Invalid task status");
 }
 
-// TODO: Maybe copy args into arena?
-RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args){
-	auto raw_task = make<RawTask>(a);
-	if(raw_task != nullptr){
-		raw_task->func = func;
-		raw_task->arena = a;
-		raw_task->args = args;
-		raw_task->_status.store(TaskStatus_Initialized);
-	}
-	return raw_task;
-}
-
 static_assert(sizeof(RawTaskPlatformSpecific) <= sizeof(RawTaskPlatformSpecificData), "Platform specific struct has insufficient size");
 static_assert(alignof(RawTaskPlatformSpecific) <= alignof(RawTaskPlatformSpecificData), "Platform specific struct has insufficient size");

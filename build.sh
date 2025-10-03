@@ -2,7 +2,7 @@
 
 cc='clang++'
 cflags='-std=c++20 -fno-exceptions -fno-rtti -fno-strict-aliasing -fwrapv'
-wflags='-Wall -Wextra -Werror=return-type -D_CRT_SECURE_NO_WARNINGS'
+wflags='-Wall -Wextra -Werror=return-type -D_CRT_SECURE_NO_WARNINGS -DTARGET_HOSTED_LINUX'
 
 Run(){ echo "-> $@"; $@; }
 
@@ -15,5 +15,5 @@ Run $cc $cflags $wflags generate.cpp base.cpp -o generate.exe
 ./generate.exe
 
 echo [Compile]
-Run $cc $cflags $wflags main.cpp base.cpp task_linux.cpp -o ft_sched.exe
+Run $cc $cflags $wflags main.cpp base.cpp ft_sched.cpp -o ft_sched.exe
 ./ft_sched.exe

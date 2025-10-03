@@ -14,7 +14,7 @@ generate.exe
 if %ERRORLEVEL% NEQ 0 GOTO ERROR
 
 echo [Compile]
-%cc% %cflags% %wflags% main.cpp base.cpp -o ft_sched.exe
+%cc% %cflags% %wflags% main.cpp base.cpp ft_sched.cpp -o ft_sched.exe
 if %ERRORLEVEL% NEQ 0 GOTO ERROR
 
 ft_sched.exe

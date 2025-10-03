@@ -1,3 +1,4 @@
+#pragma once
 #include "base.hpp"
 
 enum TaskStatus : u8 {
@@ -33,7 +34,7 @@ struct RawTask;
 // Task object that closely maps to a regular thread
 using RawTaskFunc = void (*)(RawTask* t);
 
-#if defined(__linux__)
+#if defined(TARGET_HOSTED_LINUX)
 	struct RawTaskPlatformSpecificData {
 		uintptr data[2];
 	};
@@ -78,7 +79,7 @@ struct RawTask : Task {
 
 constexpr usize default_argument_alignment = alignof(void*) * 2;
 
-RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args);//, usize args_size, usize args_align = default_argument_alignment);
+RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args, usize args_size, usize args_align = default_argument_alignment);
 
 /// Task object that is a thin wrapper over a regular function
 // template<TaskBody Fn>

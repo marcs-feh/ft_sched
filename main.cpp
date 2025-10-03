@@ -5,8 +5,6 @@
 #include "ft_sched.hpp"
 #include "task.hpp"
 
-#include "crc32.gen.cpp"
-
 using Tick = i64;
 
 using Duration = i64;
@@ -49,7 +47,7 @@ int main(){
 	auto runnables = make_list<Task*>(&arena);
 
 	for(usize i = 0; i < 20; i++){
-		auto task = make_raw_task(&arena, somebody, nullptr);
+		auto task = make_raw_task(&arena, somebody, nullptr, 0);
 		printf("Add: %p\n", task);
 		runnables.append(task);
 	}
