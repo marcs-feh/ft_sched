@@ -72,9 +72,34 @@ struct RawTask : Task {
 	void _join_and_deinit_specifics();
 };
 
+struct TMR_Task : Task {
+	Task* task0;
+	Task* task1;
+	Task* task2;
+
+	void run() override {
+		panic("Unimplemented");
+	}
+
+	TaskStatus status() override {
+		panic("Unimplemented");
+	}
+
+	void fault() override {
+		panic("Unimplemented");
+	}
+
+	void join() override {
+		panic("Unimplemented");
+	}
+};
+
 constexpr usize default_argument_alignment = alignof(void*) * 2;
 
+bool init_raw_task(RawTask* task, Arena* a, RawTaskFunc func, void* args, usize args_size, usize args_align = default_argument_alignment);
+
 RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args, usize args_size, usize args_align = default_argument_alignment);
+
 
 /// Task object that is a thin wrapper over a regular function
 // template<TaskBody Fn>

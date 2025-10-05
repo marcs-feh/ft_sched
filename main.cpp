@@ -42,6 +42,7 @@ int main(){
 	u8* arena_data = new u8[arena_size];
 
 	Arena arena = arena_from_buffer({arena_data, arena_size});
+	printf("Sizeof RawTask: %tu\n", sizeof(RawTask));
 
 	auto runnables = make_list<Task*>(&arena);
 
