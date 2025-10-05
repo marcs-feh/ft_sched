@@ -73,26 +73,68 @@ struct RawTask : Task {
 };
 
 struct TMR_Task : Task {
-	Task* task0;
-	Task* task1;
-	Task* task2;
+	RawTask task0;
+	RawTask task1;
+	RawTask task2;
 
 	void run() override {
 		panic("Unimplemented");
 	}
 
 	TaskStatus status() override {
-		panic("Unimplemented");
+		auto status0 = task0.status();
+		auto status1 = task1.status();
+		auto status2 = task2.status();
+
+		auto all_done =
+			(status0 == TaskStatus_Done) &&
+			(status1 == TaskStatus_Done) &&
+			(status2 == TaskStatus_Done);
+
+		if(all_done){
+			return TaskStatus_Done;
+		}
+
+		auto faulted =
+			(status0 == TaskStatus_Fault) ||
+			(status1 == TaskStatus_Fault) ||
+			(status2 == TaskStatus_Fault);
+
+		if(faulted){
+			return TaskStatus_Fault;
+		}
+
+		auto at_least_started =
+			(status0 >= TaskStatus_Started) &&
+			(status1 >= TaskStatus_Started) &&
+			(status2 >= TaskStatus_Started);
+
+		if(at_least_started){
+			return TaskStatus_Started;
+		}
+
+		auto at_least_initialized =
+			(status0 >= TaskStatus_Initialized) &&
+			(status1 >= TaskStatus_Initialized) &&
+			(status2 >= TaskStatus_Initialized);
+
+		if(at_least_initialized){
+			return TaskStatus_Initialized;
+		}
+
+		return TaskStatus_Undefined;
 	}
 
 	void fault() override {
 		panic("Unimplemented");
 	}
 
-	void join() override {
+	void join() {
 		panic("Unimplemented");
 	}
 };
+
+
 
 constexpr usize default_argument_alignment = alignof(void*) * 2;
 
