@@ -34,7 +34,7 @@ void print_slice(Slice<T> slice, char const* elem_fmt){
 // }
 
 void somebody(RawTask* t){
-	printf("Hello from task\n");
+	printf("Hello from task %p\n", t);
 }
 
 int main(){
@@ -42,13 +42,11 @@ int main(){
 	u8* arena_data = new u8[arena_size];
 
 	Arena arena = arena_from_buffer({arena_data, arena_size});
-	defer(printf("deferred hello!\n"));
 
 	auto runnables = make_list<Task*>(&arena);
 
 	for(usize i = 0; i < 20; i++){
 		auto task = make_raw_task(&arena, somebody, nullptr, 0);
-		printf("Add: %p\n", task);
 		runnables.append(task);
 	}
 

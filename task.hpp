@@ -34,7 +34,7 @@ struct RawTask;
 // Task object that closely maps to a regular thread
 using RawTaskFunc = void (*)(RawTask* t);
 
-#if defined(TARGET_HOSTED_LINUX)
+#if defined(TARGET_HOSTED_LINUX) || defined(TARGET_HOSTED_WINDOWS)
 	struct RawTaskPlatformSpecificData {
 		uintptr data[2];
 	};
@@ -63,15 +63,10 @@ struct RawTask : Task {
 	}
 
 	void join() override {
-	}
-	
-	void drop(){
 		_join_and_deinit_specifics();
 	}
 
-	~RawTask(){
-		drop();
-	}
+	~RawTask(){}
 
 	void _init_specifics_and_run();
 	void _join_and_deinit_specifics();

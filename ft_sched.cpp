@@ -7,6 +7,8 @@
 
 #if defined(TARGET_HOSTED_LINUX)
 	#include "task_linux.cpp"
+#elif defined(TARGET_HOSTED_WINDOWS)
+	#include "task_windows.cpp"
 #else
 	#error "Specify target platform"
 #endif
