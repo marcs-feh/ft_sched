@@ -185,6 +185,21 @@ bool Arena::resize(void* ptr, usize new_size){
 	return false;
 }
 
+Arena* Arena::make_sub(usize size){
+	auto restore = this->offset;
+	auto new_arena = (Arena*)this->alloc(sizeof(Arena), alignof(Arena));
+	auto new_storage = (u8*)this->alloc(size, alignof(void*));
+
+	if(new_arena == nullptr || new_storage == nullptr){
+		this->offset = restore;
+		return nullptr;
+	}
+
+	*new_arena = arena_from_buffer({new_storage, size});
+	return new_arena;
+}
+
+
 Arena arena_from_buffer(Slice<u8> buf){
 	Arena a;
 	a.data = (void*)buf.data;

@@ -37,6 +37,49 @@ void somebody(RawTask* t){
 	printf("Hello from task %p\n", t);
 }
 
+constexpr usize destructive_interference_size = 64;
+
+template<typename T>
+struct SPSC_Queue {
+	T* data;
+	usize capacity;
+
+	alignas(destructive_interference_size)
+	Atomic<usize> read_pos{0};
+	alignas(destructive_interference_size)
+	Atomic<usize> write_pos{0};
+
+	bool try_push(T elem){
+		auto cur_write_pos = this->write_pos.load(memory_order_relaxed);
+		auto next_write_pos = (cur_write_pos + 1) & (capacity - 1); // NOTE: Fast modulo for powers of 2
+
+		if(next_write_pos != this->read_pos.load(memory_order_acquire)){
+			this->data[write_pos] = elem;
+			this->write_pos.store(next_write_pos, memory_order_release);
+			return true;
+		}
+
+		return false;
+	}
+
+	bool try_pop(T* out){
+		auto cur_read_pos = this->read_pos.load(memory_order_relaxed);
+		if(cur_read_pos == this->write_pos.load(memory_order_acquire)){
+			return false;
+		}
+
+		if(out != nullptr){
+			*out = move(this->data[cur_read_pos]);
+		}
+
+		auto next_read_pos = (cur_read_pos + 1) & (capacity - 1);
+		this->read_pos.store(next_read_pos, memory_order_release);
+		return true;
+	}
+};
+
+// init_spsc_queue()
+
 int main(){
 	usize arena_size = 4 * mem_kilobyte;
 	u8* arena_data = new u8[arena_size];
@@ -44,20 +87,20 @@ int main(){
 	Arena arena = arena_from_buffer({arena_data, arena_size});
 	printf("Sizeof RawTask: %tu\n", sizeof(RawTask));
 
-	auto runnables = make_list<Task*>(&arena);
+	// auto runnables = make_list<Task*>(&arena);
 
-	for(usize i = 0; i < 20; i++){
-		auto task = make_raw_task(&arena, somebody, nullptr, 0);
-		runnables.append(task);
-	}
+	// for(usize i = 0; i < 20; i++){
+	// 	auto task = make_raw_task(&arena, somebody, nullptr, 0);
+	// 	runnables.append(task);
+	// }
 
-	for(usize i = 0; i < runnables.len; i++){
-		runnables[i]->run();
-	}
+	// for(usize i = 0; i < runnables.len; i++){
+	// 	runnables[i]->run();
+	// }
 
-	for(usize i = 0; i < runnables.len; i++){
-		runnables[i]->join();
-	}
+	// for(usize i = 0; i < runnables.len; i++){
+	// 	runnables[i]->join();
+	// }
 
 }
 

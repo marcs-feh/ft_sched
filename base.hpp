@@ -192,6 +192,9 @@ bool ensure_ex(bool pred, char const* msg, char const* filename, int line);
 #define unimplemented() panic_ex("Unimplemented", __FILE__, __LINE__)
 
 //// Slice
+
+struct RawSlice;
+
 template<class T>
 struct Slice {
 	T* data;
@@ -225,8 +228,8 @@ struct Slice {
 		ensure(idx < len, "Out of bounds access");
 		return data[idx];
 	}
-};
 
+};
 
 //// Memory
 constexpr usize mem_kilobyte = 1024ll;
@@ -267,6 +270,9 @@ struct Arena {
 
 	// Allocate a zeroed block of memory from arena. Returns nullptr on failure
 	void* alloc(usize size, usize align);
+
+	// Allocate a sub-arena
+	Arena* make_sub(usize size);
 
 	// Reset arena, marking all allocations as free. This also ensures that there are not dangling regions.
 	void reset();

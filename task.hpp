@@ -15,6 +15,7 @@ struct Task {
 	virtual TaskStatus status() = 0;
 	virtual void join() = 0;
 	virtual void fault() = 0;
+	// virtual Arena* local_arena() = 0;
 
 	virtual ~Task(){}
 };
@@ -42,12 +43,17 @@ using RawTaskFunc = void (*)(RawTask* t);
 	#error "Specify target platform"
 #endif
 
+// TODO(marcos): Just make this enforced
+constexpr usize default_argument_alignment = alignof(void*) * 2;
+
 struct RawTask : Task {
 	RawTaskFunc func = nullptr;
 	Arena* arena = nullptr;
 	void* args = nullptr;
-	void* result = nullptr;
+	u32 args_size;
 	Atomic<TaskStatus> _status = TaskStatus_Initialized;
+	void* result = nullptr;
+
 	RawTaskPlatformSpecificData _specific{};
 
 	void run() override {
@@ -72,13 +78,36 @@ struct RawTask : Task {
 	void _join_and_deinit_specifics();
 };
 
+bool init_raw_task(RawTask* task, Arena* a, RawTaskFunc func, void* args, usize args_size, usize args_align = default_argument_alignment);
+
+RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args, usize args_size, usize args_align = default_argument_alignment);
+
 struct TMR_Task : Task {
-	RawTask task0;
-	RawTask task1;
-	RawTask task2;
+	Arena* arena = nullptr;
+	RawTaskFunc func = nullptr;
+	void* args = nullptr;
+	u32 args_size = 0;
+	u32 subtask_arena_size = 0;
+
+	RawTask task0{};
+	RawTask task1{};
+	RawTask task2{};
 
 	void run() override {
-		panic("Unimplemented");
+		auto arena0 = this->arena->make_sub(subtask_arena_size);
+		auto arena1 = this->arena->make_sub(subtask_arena_size);
+		auto arena2 = this->arena->make_sub(subtask_arena_size);
+
+		ensure((arena0 != nullptr) && (arena1 != nullptr) && (arena2 != nullptr), "Failed to allocate sub-task arenas");
+
+		bool ok =
+			init_raw_task(&this->task0, arena0, func, args, args_size, default_argument_alignment) &&
+			init_raw_task(&this->task1, arena1, func, args, args_size, default_argument_alignment) &&
+			init_raw_task(&this->task2, arena2, func, args, args_size, default_argument_alignment);
+
+		ensure(ok, "Failed to init sub-tasks");
+
+		panic("Unimplementedj");
 	}
 
 	TaskStatus status() override {
@@ -129,18 +158,10 @@ struct TMR_Task : Task {
 		panic("Unimplemented");
 	}
 
-	void join() {
+	void join() override {
 		panic("Unimplemented");
 	}
 };
-
-
-
-constexpr usize default_argument_alignment = alignof(void*) * 2;
-
-bool init_raw_task(RawTask* task, Arena* a, RawTaskFunc func, void* args, usize args_size, usize args_align = default_argument_alignment);
-
-RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args, usize args_size, usize args_align = default_argument_alignment);
 
 
 /// Task object that is a thin wrapper over a regular function
