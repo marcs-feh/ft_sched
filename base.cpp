@@ -228,39 +228,16 @@ void arena_region_end(ArenaRegion reg){
 }
 
 //// String
-String String::slice() {
-	return *this;
-}
-
-String String::slice(usize start, usize end) {
-	ensure(end <= this->len && end >= start, "Invalid slicing indices");
-	return String(&this->data[start], end - start);
-}
-
-String String::take(usize count) {
-	ensure(count <= this->len, "Cannot take more than string length");
-	return String(this->data, count);
-}
-
-String String::skip(usize count) {
-	ensure(count <= this->len, "Cannot skip more than string length");
-	return String(&this->data[count], this->len - count);
-}
-
-String String::clone(Arena* a){
+String string_clone(String s, Arena* a){
 	String res = {};
-	auto buf = make_slice<u8>(a, this->len);
+	auto buf = make_slice<u8>(a, s.len);
 	if(buf.data == nullptr){ return res; }
-	mem_copy_no_overlap(buf.data, this->data, this->len);
+	mem_copy_no_overlap(buf.data, s.data, s.len);
 
 	res.data = (char const*)buf.data;
-	res.len = this->len;
+	res.len = s.len;
 
 	return res;
-}
-
-Slice<u8> String::raw_bytes(){
-	return Slice<u8>{(u8*)this->data, this->len};
 }
 
 cstring clone_to_cstring(String s, Arena* a){

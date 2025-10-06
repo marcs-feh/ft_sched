@@ -10,10 +10,10 @@ set -eu
 
 cflags="$cflags $wflags"
 
-echo [Code generation]
+echo '[ Code generation ]'
 Run $cc $cflags $wflags generate.cpp base.cpp -o generate.exe
 ./generate.exe
 
-echo [Compile]
+echo '[ Compile ]'
 Run $cc $cflags $wflags main.cpp base.cpp ft_sched.cpp -o ft_sched.exe
 ./ft_sched.exe

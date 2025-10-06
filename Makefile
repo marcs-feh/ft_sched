@@ -1,10 +1,7 @@
 CC := clang++
 CFLAGS := -std=c++20 -fno-exceptions -fno-rtti -fno-strict-aliasing -fwrapv
 WFLAGS := -Wall -Wextra -Werror=return-type -D_CRT_SECURE_NO_WARNINGS
-OPTFLAGS := -O0
-LDFLAGS :=
-
-.PHONY: run clean
+OPTFLAGS := -Os
 
 all: ft_sched.exe
 	@./ft_sched.exe
