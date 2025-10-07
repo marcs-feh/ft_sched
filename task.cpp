@@ -35,3 +35,16 @@ RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args, usize arg_size, u
 	return task;
 }
 
+bool init_tmr_task(RawTask* task, Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args, usize args_size, usize args_align = default_argument_alignment){
+	panic("Unimplemented");
+}
+
+TMR_Task* make_tmr_task(Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args, usize args_size, usize args_align = default_argument_alignment){
+	auto task = a->make<RawTask>();
+	if(task == nullptr) { return nullptr; }
+
+	if(!init_tmr_task(task, a, subtask_arena_size, func, args, args_size, args_align)){
+		return nullptr;
+	}
+	return task;
+}

@@ -107,7 +107,9 @@ struct TMR_Task : Task {
 
 		ensure(ok, "Failed to init sub-tasks");
 
-		panic("Unimplementedj");
+		this->task0.run();
+		this->task1.run();
+		this->task2.run();
 	}
 
 	TaskStatus status() override {
@@ -158,11 +160,17 @@ struct TMR_Task : Task {
 		panic("Unimplemented");
 	}
 
+	// TODO: Use a timeout
 	void join() override {
-		panic("Unimplemented");
+		task0->join();
+		task1->join();
+		task2->join();
 	}
 };
 
+bool init_tmr_task(RawTask* task, Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args, usize args_size, usize args_align = default_argument_alignment);
+
+TMR_Task* make_tmr_task(Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args, usize args_size, usize args_align = default_argument_alignment);
 
 /// Task object that is a thin wrapper over a regular function
 // template<TaskBody Fn>
