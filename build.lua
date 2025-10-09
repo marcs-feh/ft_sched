@@ -24,13 +24,19 @@ function build()
 
 	append(cflags, wflags)
 
+	local objects = {}
 	for _, f in ipairs(files) do
-		local cmd = ('%s %s -c %s'):format(cc, join_space(cflags), f, f .. '.o')
+		local obj = f .. '.o'
+		objects[#objects+1] = obj
+		local cmd = ('%s %s -c %s -o %s'):format(cc, join_space(cflags), f, obj)
 		run(cmd)
 	end
-
 	wait()
 
+	local cmd = ('%s %s -o ft_sched.exe'):format(cc, join_space(objects))
+	run(cmd)
+
+	wait()
 end
 
 function join_space(tbl)
