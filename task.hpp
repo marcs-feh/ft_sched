@@ -162,13 +162,13 @@ struct TMR_Task : Task {
 
 	// TODO: Use a timeout
 	void join() override {
-		task0->join();
-		task1->join();
-		task2->join();
+		this->task0.join();
+		this->task1.join();
+		this->task2.join();
 	}
 };
 
-bool init_tmr_task(RawTask* task, Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args, usize args_size, usize args_align = default_argument_alignment);
+bool init_tmr_task(TMR_Task* task, Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args, usize args_size, usize args_align = default_argument_alignment);
 
 TMR_Task* make_tmr_task(Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args, usize args_size, usize args_align = default_argument_alignment);
 
