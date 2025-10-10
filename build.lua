@@ -1,18 +1,17 @@
-local cc = 'clang++'
-local cflags = {'-std=c++20', '-fno-exceptions', '-fno-rtti', '-fno-strict-aliasing', '-fwrapv'}
-local wflags = {'-Wall', '-Wextra', '-Werror=return-type'}
-
-local files = {
-	'base.cpp',
-	'main.cpp',
-	'ft_sched.cpp',
-}
-
-local process_queue = {}
-local platform = arg[1] or '<Empty>'
+platform = arg[1] or '<Empty>'
 
 function build()
-	local args = _G.arg
+	local exec = Executor:new()
+
+	local cc = 'clang++'
+	local cflags = {'-std=c++20', '-fno-exceptions', '-fno-rtti', '-fno-strict-aliasing', '-fwrapv'}
+	local wflags = {'-Wall', '-Wextra', '-Werror=return-type'}
+
+	local files = {
+		'base.cpp',
+		'main.cpp',
+		'ft_sched.cpp',
+	}
 
 	if platform == 'linux' then
 		append(cflags, {'-fPIC', '-DTARGET_HOSTED_LINUX'})
@@ -29,21 +28,27 @@ function build()
 		local obj = f .. '.o'
 		objects[#objects+1] = obj
 		local cmd = ('%s %s -c %s -o %s'):format(cc, join_space(cflags), f, obj)
-		run(cmd)
+		exec:submit(cmd)
 	end
-	wait()
+	exec:wait()
 
 	local cmd = ('%s %s -o ft_sched.exe'):format(cc, join_space(objects))
-	run(cmd)
-
-	wait()
+	exec:submit(cmd):wait()
 end
 
-function join_space(tbl)
-	return table.concat(tbl, ' ')
+Executor = {}
+
+function Executor:new(o)
+	o = o or {}
+	setmetatable(o, self)
+	self.__index = self
+
+	o.process_queue = {}
+
+	return o
 end
 
-function run(cmd)
+function Executor:submit(cmd)
 	print('-> ' .. cmd)
 
 	if platform == 'linux' or platform == 'windows' then
@@ -52,12 +57,14 @@ function run(cmd)
 		error('Unknown platform: ' .. platform)
 	end
 
-	process_queue[#process_queue+1] = io.popen(cmd)
+	self.process_queue[#self.process_queue+1] = io.popen(cmd)
+
+	return self
 end
 
-function wait()
+function Executor:wait()
 	local fail = false
-	for _, proc in ipairs(process_queue) do
+	for _, proc in ipairs(self.process_queue) do
 		local output = proc:read('*all')
 		ok, reason, exit_code = proc:close()
 		if not ok then
@@ -68,7 +75,13 @@ function wait()
 	if fail then
 		error('one or more subprocesses have failed')
 	end
-	process_queue = {}
+	self.process_queue = {}
+
+	return self
+end
+
+function join_space(tbl)
+	return table.concat(tbl, ' ')
 end
 
 function append(dest, src)
@@ -78,6 +91,5 @@ function append(dest, src)
 	end
 	return dest
 end
-
 
 build()
