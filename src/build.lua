@@ -1,95 +1,92 @@
-platform = arg[1] or '<Empty>'
+local platform = arg[1] or error('Required platform')
+local build_mode = arg[2] or 'debug'
+local now = os.date('%Y-%m-%d %H:%M:%S', os.time())
 
-function build()
-	local exec = Executor:new()
-
+function generate_ninja()
 	local cc = 'clang++'
-	local cflags = {'-std=c++20', '-fno-exceptions', '-fno-rtti', '-fno-strict-aliasing', '-fwrapv'}
+	local cflags = {'-std=c++20', '-fwrapv', '-fno-strict-aliasing', '-fno-rtti', '-fno-exceptions'}
 	local wflags = {'-Wall', '-Wextra', '-Werror=return-type'}
+	local ldflags = {}
 
-	local files = {
-		'base.cpp',
+	local sb = Builder:new()
+	local sources = {
 		'main.cpp',
+		'base.cpp',
 		'ft_sched.cpp',
 	}
+	local objects = {}
 
 	if platform == 'linux' then
-		append(cflags, {'-fPIC', '-DTARGET_HOSTED_LINUX'})
+		cflags[#cflags+1] = '-fPIC'
+		sources[#sources+1] = 'task_linux.cpp'
 	elseif platform == 'windows' then
-		append(cflags, {'-D_CRT_SECURE_NO_WARNINGS', '-DTARGET_HOSTED_WINDOWS'})
-	else
-		error('Unknown platform: ' .. platform)
+		cflags[#cflags+1] = '-D_CRT_SECURE_NO_WARNINGS'
+		sources[#sources+1] = 'task_windows.cpp'
 	end
 
-	append(cflags, wflags)
+	if build_mode == 'debug' then
+		cflags[#cflags+1] = '-g'
+		cflags[#cflags+1] = '-O0'
+	elseif build_mode == 'release' then
+		cflags[#cflags+1] = '-O2'
+	end
 
-	local objects = {}
-	for _, f in ipairs(files) do
-		local obj = f .. '.o'
+	sb:line('cc = %s', cc)
+	sb:line('cflags = %s', join_space(cflags))
+	sb:line('wflags = %s', join_space(wflags))
+	sb:line('ldflags = %s', join_space(ldflags))
+	sb:line('rule compile')
+	sb:line('  command = $cc $cflags $wflags -c $in -o $out -MD -MF $out.d')
+	sb:line('  deps = gcc')
+	sb:line('  depfile = $out.d')
+	sb:line('rule archive')
+	sb:line('  command = $ar rcs $out $in')
+	sb:line('rule link')
+	sb:line('  command = $cc -o $out $in $ldflags')
+
+	for _, file in ipairs(sources) do
+		local obj = file .. '.o'
+		sb:line('build %s: compile %s', obj, file)
 		objects[#objects+1] = obj
-		local cmd = ('%s %s -c %s -o %s'):format(cc, join_space(cflags), f, obj)
-		exec:submit(cmd)
 	end
-	exec:wait()
+	sb:line('build ft_sched.exe: link %s', join_space(objects))
 
-	local cmd = ('%s %s -o ft_sched.exe'):format(cc, join_space(objects))
-	exec:submit(cmd):wait()
+	-- Ninja is picky about ending with a newline
+	sb:line():line()
+	local f = io.open('build.ninja', 'wb')
+	f:write(sb:to_string())
+	print(('Generated build.ninja (%s/%s)'):format(titlecase(build_mode), titlecase(platform)))
 end
 
-Executor = {}
+Builder = {}
 
-function Executor:new(o)
+function Builder:new(o)
 	o = o or {}
 	setmetatable(o, self)
 	self.__index = self
 
-	o.process_queue = {}
+	o.lines = {}
 
 	return o
 end
 
-function Executor:submit(cmd)
-	print('-> ' .. cmd)
-
-	if platform == 'linux' or platform == 'windows' then
-		cmd = cmd .. ' 2>&1'
-	else
-		error('Unknown platform: ' .. platform)
-	end
-
-	self.process_queue[#self.process_queue+1] = io.popen(cmd)
-
+function Builder:line(fmt, ...)
+	fmt = fmt or ''
+	self.lines[#self.lines+1] = fmt:format(...)
 	return self
 end
 
-function Executor:wait()
-	local fail = false
-	for _, proc in ipairs(self.process_queue) do
-		local output = proc:read('*all')
-		ok, reason, exit_code = proc:close()
-		if not ok then
-			print('--- SUBPROCESS FAILED ---\n' .. output .. '\n')
-			fail = true
-		end
-	end
-	if fail then
-		error('one or more subprocesses have failed')
-	end
-	self.process_queue = {}
-
-	return self
+function Builder:to_string()
+	return table.concat(self.lines, '\n')
 end
 
 function join_space(tbl)
 	return table.concat(tbl, ' ')
 end
 
-function append(dest, src)
-	assert(type(dest) == 'table' and type(src) == 'table', 'Expected table')
-	for _, v in ipairs(src) do
-		dest[#dest+1] = v
-	end
-	return dest
+function titlecase(k)
+	assert(#k > 0)
+	return k:sub(1, 1):upper() .. k:sub(2)
 end
 
-build()
+generate_ninja()
