@@ -35,13 +35,9 @@ struct RawTask;
 // Task object that closely maps to a regular thread
 using RawTaskFunc = void (*)(RawTask* t);
 
-#if defined(TARGET_HOSTED_LINUX) || defined(TARGET_HOSTED_WINDOWS)
-	struct RawTaskPlatformSpecificData {
-		uintptr data[2];
-	};
-#else
-	#error "Specify target platform"
-#endif
+struct RawTaskPlatformSpecificData {
+	uintptr data[2];
+};
 
 // TODO(marcos): Just make this enforced
 constexpr usize default_argument_alignment = alignof(void*) * 2;

@@ -58,6 +58,57 @@ function generate_ninja()
 	print(('Generated build.ninja (%s/%s)'):format(titlecase(build_mode), titlecase(platform)))
 end
 
+function generate_crc32()
+	local sb = Builder:new()
+	local polynomial = 0xEDB88320
+	local lut = new_c32_lut(polynomial)
+	assert(#lut == 256, 'Invalid LUT')
+
+	sb:line('constexpr u32 CRC32_POLYNOMIAL = 0x%08X;', polynomial)
+	sb:line('constexpr u32 crc32_lut[] = {')
+	sb:line('\t')
+	for i, v in ipairs(lut) do
+		sb:append('0x%08x,', v)
+
+		if (i ~= 0) and (i % 8 == 0) then
+			sb:line()
+			sb:append('\t')
+		end
+
+	end
+	sb:line('};')
+
+
+	local f = io.open('crc32_lut.cpp', 'wb')
+	f:write(sb:to_string())
+	print(('Generated crc32_lut.cpp (P = 0x%08X)'):format(polynomial))
+end
+
+function new_c32_lut(polynomial)
+    local BIT_WIDTH = 32
+    local TOP_BIT = (1 << (BIT_WIDTH - 1))  -- 0x80000000
+
+    local lut = {}
+    local remainder = 0
+
+    for dividend = 0, 255 do
+        remainder = dividend << (BIT_WIDTH - 8)
+
+        for bit = 8, 1, -1 do
+            if (remainder & TOP_BIT) ~= 0 then
+                remainder = ((remainder << 1) & 0xFFFFFFFF) -- Truncate to 32bit
+                remainder = remainder ~ polynomial
+            else
+                remainder = (remainder << 1) & 0xFFFFFFFF  -- Truncate to 32bit
+            end
+        end
+
+        lut[dividend + 1] = remainder
+    end
+
+    return lut
+end
+
 Builder = {}
 
 function Builder:new(o)
@@ -68,6 +119,12 @@ function Builder:new(o)
 	o.lines = {}
 
 	return o
+end
+
+function Builder:append(fmt, ...)
+	fmt = fmt or ''
+	self.lines[#self.lines] = (self.lines[#self.lines] or '') .. fmt:format(...)
+	return self
 end
 
 function Builder:line(fmt, ...)
@@ -90,3 +147,4 @@ function titlecase(k)
 end
 
 generate_ninja()
+generate_crc32()

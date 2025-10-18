@@ -645,6 +645,8 @@ RuneDecoded rune_decode(u8 const* buf, u32 buflen);
 
 cstring clone_to_cstring(String s, Arena* a);
 
+String buffer_vprintf(Slice<u8> buf, char const* fmt, va_list args);
+
 String arena_vprintf(Arena* arena, char const* fmt, va_list args);
 
 String arena_printf(Arena* arena, char const* fmt, ...);

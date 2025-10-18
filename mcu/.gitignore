@@ -1,7 +1,0 @@
-*.elf
-*.bin
-*.map
-*.o
-*.a
-*.lib
-build

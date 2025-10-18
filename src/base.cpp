@@ -394,16 +394,23 @@ RuneEncoded rune_encode(rune r){
 	}
 }
 
-String arena_vprintf(Arena* arena, char const* fmt, va_list args){
-	void* base = (void*)((uintptr)arena->data + arena->offset);
-	usize size = arena->capacity - arena->offset;
-
-	int n = stbsp_vsnprintf((char*)base, (int)size - 1, fmt, args);
+String buffer_vprintf(Slice<u8> buf, char const* fmt, va_list args){
+	int n = stbsp_vsnprintf((char*)buf.data, (int)buf.len - 1, fmt, args);
 	if(n > 0){
-		arena->offset += n + 1; /* Account for nullptr terminator */
-		return String((char const*)base, n);
+		buf[n] = 0;
+		return String((char const*)buf.data, n);
 	}
 	return {};
+}
+
+String arena_vprintf(Arena* arena, char const* fmt, va_list args){
+	u8* base = (u8*)((uintptr)arena->data + arena->offset);
+	usize size = arena->capacity - arena->offset;
+
+	String res = buffer_vprintf({base, size}, fmt, args);
+	arena->offset += res.len;
+
+	return res;
 }
 
 String arena_printf(Arena* arena, char const* fmt, ...){
@@ -413,6 +420,7 @@ String arena_printf(Arena* arena, char const* fmt, ...){
 	va_end(args);
 	return res;
 }
+
 
 //// Heap
 // extern "C"{
