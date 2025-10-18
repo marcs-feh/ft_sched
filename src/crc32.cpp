@@ -1,5 +1,5 @@
 #include "base.hpp"
-#include "crc32_lut.cpp"
+#include "crc32_lut.gen.cpp"
 
 u32 crc32(Slice<u8> buf){
 	constexpr u32 bit_width = sizeof(u32) * 8;

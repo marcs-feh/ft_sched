@@ -64,6 +64,7 @@ function generate_crc32()
 	local lut = new_c32_lut(polynomial)
 	assert(#lut == 256, 'Invalid LUT')
 
+	sb:line(('/* File auto generated at %s */'):format(now))
 	sb:line('constexpr u32 CRC32_POLYNOMIAL = 0x%08X;', polynomial)
 	sb:line('constexpr u32 crc32_lut[] = {')
 	sb:line('\t')
@@ -74,14 +75,12 @@ function generate_crc32()
 			sb:line()
 			sb:append('\t')
 		end
-
 	end
 	sb:line('};')
 
-
-	local f = io.open('crc32_lut.cpp', 'wb')
+	local f = io.open('crc32_lut.gen.cpp', 'wb')
 	f:write(sb:to_string())
-	print(('Generated crc32_lut.cpp (P = 0x%08X)'):format(polynomial))
+	print(('Generated crc32_lut.gen.cpp (P = 0x%08X)'):format(polynomial))
 end
 
 function new_c32_lut(polynomial)
