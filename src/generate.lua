@@ -28,7 +28,7 @@ function generate_ninja()
 		cflags[#cflags+1] = '-g'
 		cflags[#cflags+1] = '-O0'
 	elseif build_mode == 'release' then
-		cflags[#cflags+1] = '-O2'
+		cflags[#cflags+1] = '-Os'
 	end
 
 	sb:line('cc = %s', cc)
@@ -147,3 +147,4 @@ end
 
 generate_ninja()
 generate_crc32()
+

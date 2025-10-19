@@ -81,13 +81,13 @@ struct SPSC_Queue {
 // init_spsc_queue()
 
 int main(){
-	usize arena_size = 4 * mem_kilobyte;
+	usize arena_size = 24 * mem_kilobyte;
 	u8* arena_data = new u8[arena_size];
 
 	Arena arena = arena_from_buffer({arena_data, arena_size});
 	printf("Sizeof RawTask: %tu\n", sizeof(RawTask));
 
-	// auto runnables = make_list<Task*>(&arena);
+	make_tmr_task(&arena, 2 * mem_kilobyte, somebody, nullptr, 0);
 
 	// for(usize i = 0; i < 20; i++){
 	// 	auto task = make_raw_task(&arena, somebody, nullptr, 0);
