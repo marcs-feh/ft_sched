@@ -9,7 +9,7 @@
 			"name": "Build (Ninja)",
 			"working_dir": "$project_path/src",
 			"linux": {
-				"shell_cmd": "ninja -v && ft_sched.exe",
+				"shell_cmd": "ninja -v && ./ft_sched.exe",
 			},
 			"windows": {
 				"shell_cmd": "ninja -v && ft_sched.exe",
