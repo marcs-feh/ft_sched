@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <math.h>
 
 #include "base.hpp"
 
@@ -29,13 +30,17 @@ void print_slice(Slice<T> slice, char const* elem_fmt){
 // 	return t;
 // }
 
+static
+i32 randint(i32 a, i32 b){
+    return (rand() % (b - a + 1)) + a;
+}
+
+
 TimeTick start = 0;
 
 void somebody(RawTask* t){
-	for(i64 i = 0; i < 8'000'000'000; i++){
-	}
 
-	printf("Hello from task %p, it's been: %td us\n", t, tick_diff(tick_now(), start)._value);
+	printf("Hello from task %p, it's been: %td ms\n", t, tick_diff(tick_now(), start).to_milli());
 }
 
 // init_spsc_queue()
@@ -64,7 +69,6 @@ u8 permanent_arena_data[4 * mem_kilobyte];
 
 static
 void print_info(){
-
 	f64 tick_duration = f64(Duration::scale) / f64(tick_frequency());
 
 	cstring scale_suffix = "?";
@@ -75,13 +79,14 @@ void print_info(){
 	case 1'000'000'000: scale_suffix = "ns"; break;
 	default: panic("Invalid duration"); break;
 	}
-	
+
 	printf("Address Width:  %zu-bit\n", sizeof(void*) * 8);
 	printf("Tick Frequency: %tu Hz\n", tick_frequency());
 	printf("Tick Duration:  %g %s\n", tick_duration, scale_suffix);
 }
 
 int main(){
+	srand(tick_now());
 	permanent_arena = arena_from_buffer(Slice<u8>{&permanent_arena_data[0], sizeof(permanent_arena_data)});
 
 	start = tick_now();

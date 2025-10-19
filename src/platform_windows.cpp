@@ -82,7 +82,11 @@ Duration tick_diff(TimeTick a, TimeTick b){
 	return {nano_diff};
 }
 
-// Duration tick_since(TimeTick t){
-// 	TimeTick t = 
-// }
+
+void sleep_for(Duration d){
+	constexpr f64 milliseconds_per_duration = 1000.0 / static_cast<f64>(Duration::scale);
+
+	DWORD ms = max(1, (d._value / Duration::millisecond));
+	Sleep(ms);
+}
 
