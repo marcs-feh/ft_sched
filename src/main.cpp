@@ -52,17 +52,19 @@ struct Deadline {
 Arena permanent_arena;
 u8 permanent_arena_data[4 * mem_kilobyte];
 
+//// Software watchdog timer
 Atomic<TimeTick> watchdog_last_tick = 0;
+
 void watchdog_timer_func(RawTask*){
 	const Duration limit = Duration::from_milli(500);
 	watchdog_last_tick = tick_now();
 
 	while(1){
 		auto now = tick_now();
-		auto elapsed = tick_diff(now, watchdog_last_tick.load());
-		printf("[WD] Check limit=%tdms elapsed=%tdms\n", limit.to_milli(), elapsed.to_milli());
+		auto elapsed = tick_diff(now, watchdog_last_tick.load(memory_order_relaxed));
 
 		if(elapsed > limit){
+			fprintf(stderr, "[WD] Failed! limit=%tdms elapsed=%tdms\n", limit.to_milli(), elapsed.to_milli());
 			panic("Watchdog fail.");
 		}
 		sleep_for(Duration::from_second(0));
@@ -70,8 +72,9 @@ void watchdog_timer_func(RawTask*){
 }
 
 void reset_watchdog(){
-	watchdog_last_tick.store(tick_now());
+	watchdog_last_tick.store(tick_now(), memory_order_relaxed);
 }
+////-----------------------
 
 
 static
@@ -84,7 +87,7 @@ void print_info(){
 }
 
 void somebody(RawTask* t){
-	sleep_for(Duration::from_milli(250));
+	sleep_for(Duration::from_milli(124));
 	reset_watchdog();
 	sleep_for(Duration::from_milli(450));
 	printf("Hello from task %p, it's been: %td us\n", t, tick_diff(tick_now(), start).to_micro());
