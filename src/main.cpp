@@ -32,8 +32,10 @@ void print_slice(Slice<T> slice, char const* elem_fmt){
 TimeTick start = 0;
 
 void somebody(RawTask* t){
-	for(int i = 0; i < 10'000'000; i++);
-	printf("Hello from task %p, it's been: %tdus\n", t, tick_diff(tick_now(), start)._nsec / 1'000);
+	for(i64 i = 0; i < 8'000'000'000; i++){
+	}
+
+	printf("Hello from task %p, it's been: %td us\n", t, tick_diff(tick_now(), start)._value);
 }
 
 // init_spsc_queue()
@@ -44,38 +46,55 @@ struct Deadline {
 	TimeTick deadline{0};
 	RawTask* task;
 
-	// bool check(){}
+	// bool check(){
 };
 
 
+Arena permanent_arena;
+u8 permanent_arena_data[4 * mem_kilobyte];
+
+// usize wd_timer_ns = 0;
+// void watchdog_timer(Task* t){
+// 	wd_timer_ns();
+// }
+
+// void spawn_watchdog_timer(){
+// 	make_raw_task(&permanent_arena);
+// }
+
+static
+void print_info(){
+
+	f64 tick_duration = f64(Duration::scale) / f64(tick_frequency());
+
+	cstring scale_suffix = "?";
+	switch(Duration::scale){
+	case 1: scale_suffix = "s"; break;
+	case 1'000: scale_suffix = "ms"; break;
+	case 1'000'000: scale_suffix = "us"; break;
+	case 1'000'000'000: scale_suffix = "ns"; break;
+	default: panic("Invalid duration"); break;
+	}
+	
+	printf("Address Width:  %zu-bit\n", sizeof(void*) * 8);
+	printf("Tick Frequency: %tu Hz\n", tick_frequency());
+	printf("Tick Duration:  %g %s\n", tick_duration, scale_suffix);
+}
+
 int main(){
+	permanent_arena = arena_from_buffer(Slice<u8>{&permanent_arena_data[0], sizeof(permanent_arena_data)});
+
 	start = tick_now();
 	usize arena_size = 24 * mem_kilobyte;
 	u8* arena_data = new u8[arena_size];
 
-	Arena arena = arena_from_buffer({arena_data, arena_size});
-	printf("Sizeof RawTask: %tu\n", sizeof(RawTask));
+	Arena arena = arena_from_buffer(Slice<u8>{&arena_data[0], arena_size});
+	print_info();
 
-	f64 nano_per_tick = 1.0e9 / f64(tick_frequency());
-	printf("Frequency: %tu\n", tick_frequency());
-	printf("ns/tick: %g\n", nano_per_tick);
 
 	auto t = make_tmr_task(&arena, 2 * mem_kilobyte, somebody, nullptr, 0);
 	t->run();
 
 	t->join();
-
-	// for(usize i = 0; i < 20; i++){
-	// 	auto task = make_raw_task(&arena, somebody, nullptr, 0);
-	// 	runnables.append(task);
-	// }
-
-	// for(usize i = 0; i < runnables.len; i++){
-	// 	runnables[i]->run();
-	// }
-
-	// for(usize i = 0; i < runnables.len; i++){
-	// 	runnables[i]->join();
-	// }
 }
 

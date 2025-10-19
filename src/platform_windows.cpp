@@ -69,16 +69,16 @@ usize tick_frequency(){
 }
 
 TimeTick duration_to_tick(Duration d){
-	auto ticks_per_nano = f64(tick_frequency()) / 1.0e9;
-	auto tick_count = usize(f64(d._nsec) * ticks_per_nano);
+	auto ticks_per_duration = f64(tick_frequency()) / f64(Duration::scale);
+	auto tick_count = usize(f64(d._value) * ticks_per_duration);
 
 	return tick_count;
 }
 
 Duration tick_diff(TimeTick a, TimeTick b){
 	f64 diff = f64(a) - f64(b);
-	f64 nano_per_tick = 1.0e9 / f64(tick_frequency());
-	auto nano_diff = static_cast<isize>(diff * nano_per_tick);
+	f64 tick_duration = f64(Duration::scale) / f64(tick_frequency());
+	auto nano_diff = static_cast<isize>(diff * tick_duration);
 	return {nano_diff};
 }
 

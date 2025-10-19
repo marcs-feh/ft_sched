@@ -1,0 +1,39 @@
+{
+	"folders": [
+		{
+			"path": ".",
+		},
+	],
+	"build_systems": [
+		{
+			"name": "Build (Ninja)",
+			"working_dir": "$project_path/src",
+			"linux": {
+				"shell_cmd": "ninja -v && ft_sched.exe",
+			},
+			"windows": {
+				"shell_cmd": "ninja -v && ft_sched.exe",
+			}
+		},
+		{
+			"name": "Generate Sources (Debug)",
+			"working_dir": "$project_path/src",
+			"linux": {
+				"cmd": ["lua", "generate.lua", "linux", "debug"],
+			},
+			"windows": {
+				"cmd": ["lua", "generate.lua", "windows", "release"],
+			},
+		},
+		{
+			"name": "Generate Sources (Release)",
+			"working_dir": "$project_path/src",
+			"linux": {
+				"cmd": ["lua", "generate.lua", "linux", "release"],
+			},
+			"windows": {
+				"cmd": ["lua", "generate.lua", "windows", "release"],
+			},
+		}
+	],
+}

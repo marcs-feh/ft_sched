@@ -1,7 +1,7 @@
 cc = clang++
-cflags = -std=c++20 -fwrapv -fno-strict-aliasing -fno-rtti -fno-exceptions -D_CRT_SECURE_NO_WARNINGS -g -O0
+cflags = -std=c++20 -fwrapv -fno-strict-aliasing -fno-rtti -fno-exceptions -D_CRT_SECURE_NO_WARNINGS -Os
 wflags = -Wall -Wextra -Werror=return-type
-ldflags = -g
+ldflags = 
 rule compile
   command = $cc $cflags $wflags -c $in -o $out -MD -MF $out.d
   deps = gcc

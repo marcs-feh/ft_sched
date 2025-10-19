@@ -6,3 +6,4 @@
 *.a
 *.lib
 .ninja_*
+*.sublime-workspace
