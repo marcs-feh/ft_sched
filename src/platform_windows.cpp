@@ -63,6 +63,7 @@ usize tick_frequency(){
 	    }
 
 		_tick_frequency = f.QuadPart;
+		ensure((_tick_frequency / Duration::scale) > 0, "Tick frequency is too low to be accurately represented");
 	}
 
 	return _tick_frequency;
@@ -75,18 +76,24 @@ TimeTick duration_to_tick(Duration d){
 	return tick_count;
 }
 
-Duration tick_diff(TimeTick a, TimeTick b){
-	f64 diff = f64(a) - f64(b);
-	f64 tick_duration = f64(Duration::scale) / f64(tick_frequency());
-	auto nano_diff = static_cast<isize>(diff * tick_duration);
-	return {nano_diff};
-}
+// Duration tick_diff(TimeTick a, TimeTick b){
+// 	f64 diff = f64(a) - f64(b);
+// 	f64 tick_duration = f64(Duration::scale) / f64(tick_frequency());
+// 	auto diff = static_cast<isize>(diff * tick_duration);
+// 	return {diff};
+// }
 
+// Hz -> T/s
+// us -> s/1e6
+// tick / F -> s:
+//	s / Scale -> s/1e6
+	// tick / F / Scale
+// F / Scale -> (T/s) / (1e6) -> (T/ (1e6 s))
 
 void sleep_for(Duration d){
 	constexpr f64 milliseconds_per_duration = 1000.0 / static_cast<f64>(Duration::scale);
 
-	DWORD ms = max(1, (d._value / Duration::millisecond));
+	DWORD ms = max(0, (d._value / Duration::millisecond));
 	Sleep(ms);
 }
 

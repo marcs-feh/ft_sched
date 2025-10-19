@@ -35,16 +35,10 @@ i32 randint(i32 a, i32 b){
     return (rand() % (b - a + 1)) + a;
 }
 
-
 TimeTick start = 0;
 
-void somebody(RawTask* t){
-
-	printf("Hello from task %p, it's been: %td ms\n", t, tick_diff(tick_now(), start).to_milli());
-}
 
 // init_spsc_queue()
-
 
 struct Deadline {
 	TimeTick last_tick{0};
@@ -58,31 +52,42 @@ struct Deadline {
 Arena permanent_arena;
 u8 permanent_arena_data[4 * mem_kilobyte];
 
-// usize wd_timer_ns = 0;
-// void watchdog_timer(Task* t){
-// 	wd_timer_ns();
-// }
+Atomic<TimeTick> watchdog_last_tick = 0;
+void watchdog_timer_func(RawTask*){
+	const Duration limit = Duration::from_milli(500);
+	watchdog_last_tick = tick_now();
 
-// void spawn_watchdog_timer(){
-// 	make_raw_task(&permanent_arena);
-// }
+	while(1){
+		auto now = tick_now();
+		auto elapsed = tick_diff(now, watchdog_last_tick.load());
+		printf("[WD] Check limit=%tdms elapsed=%tdms\n", limit.to_milli(), elapsed.to_milli());
+
+		if(elapsed > limit){
+			panic("Watchdog fail.");
+		}
+		sleep_for(Duration::from_second(0));
+	}
+}
+
+void reset_watchdog(){
+	watchdog_last_tick.store(tick_now());
+}
+
 
 static
 void print_info(){
-	f64 tick_duration = f64(Duration::scale) / f64(tick_frequency());
-
-	cstring scale_suffix = "?";
-	switch(Duration::scale){
-	case 1: scale_suffix = "s"; break;
-	case 1'000: scale_suffix = "ms"; break;
-	case 1'000'000: scale_suffix = "us"; break;
-	case 1'000'000'000: scale_suffix = "ns"; break;
-	default: panic("Invalid duration"); break;
-	}
+	f64 tick_duration = 1.0 / f64(tick_frequency());
 
 	printf("Address Width:  %zu-bit\n", sizeof(void*) * 8);
 	printf("Tick Frequency: %tu Hz\n", tick_frequency());
-	printf("Tick Duration:  %g %s\n", tick_duration, scale_suffix);
+	printf("Tick Duration:  %g ms\n", tick_duration * 1'000);
+}
+
+void somebody(RawTask* t){
+	sleep_for(Duration::from_milli(250));
+	reset_watchdog();
+	sleep_for(Duration::from_milli(450));
+	printf("Hello from task %p, it's been: %td us\n", t, tick_diff(tick_now(), start).to_micro());
 }
 
 int main(){
@@ -96,6 +101,8 @@ int main(){
 	Arena arena = arena_from_buffer(Slice<u8>{&arena_data[0], arena_size});
 	print_info();
 
+	auto wd = make_raw_task(&arena, watchdog_timer_func, nullptr, 0);
+	wd->run();
 
 	auto t = make_tmr_task(&arena, 2 * mem_kilobyte, somebody, nullptr, 0);
 	t->run();
