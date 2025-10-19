@@ -18,13 +18,15 @@ function generate_ninja()
 
 	if platform == 'linux' then
 		cflags[#cflags+1] = '-fPIC'
-		sources[#sources+1] = 'task_linux.cpp'
+		sources[#sources+1] = 'platform_linux.cpp'
 	elseif platform == 'windows' then
 		cflags[#cflags+1] = '-D_CRT_SECURE_NO_WARNINGS'
-		sources[#sources+1] = 'task_windows.cpp'
+		sources[#sources+1] = 'platform_windows.cpp'
 	end
 
 	if build_mode == 'debug' then
+		ldflags[#ldflags+1] = '-g'
+
 		cflags[#cflags+1] = '-g'
 		cflags[#cflags+1] = '-O0'
 	elseif build_mode == 'release' then

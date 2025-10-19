@@ -5,10 +5,6 @@
 #include "ft_sched.hpp"
 #include "task.hpp"
 
-using Tick = i64;
-
-using Duration = i64;
-
 template<class T>
 void print_list(List<T> const& list, char const* elem_fmt){
 	printf("len: %td cap: %td [ ", list.len, list.cap);
@@ -33,61 +29,41 @@ void print_slice(Slice<T> slice, char const* elem_fmt){
 // 	return t;
 // }
 
+TimeTick start = 0;
+
 void somebody(RawTask* t){
-	printf("Hello from task %p\n", t);
+	for(int i = 0; i < 10'000'000; i++);
+	printf("Hello from task %p, it's been: %tdus\n", t, tick_diff(tick_now(), start)._nsec / 1'000);
 }
-
-constexpr usize destructive_interference_size = 64;
-
-template<typename T>
-struct SPSC_Queue {
-	T* data;
-	usize capacity;
-
-	alignas(destructive_interference_size)
-	Atomic<usize> read_pos{0};
-	alignas(destructive_interference_size)
-	Atomic<usize> write_pos{0};
-
-	bool try_push(T elem){
-		auto cur_write_pos = this->write_pos.load(memory_order_relaxed);
-		auto next_write_pos = (cur_write_pos + 1) & (capacity - 1); // NOTE: Fast modulo for powers of 2
-
-		if(next_write_pos != this->read_pos.load(memory_order_acquire)){
-			this->data[write_pos] = elem;
-			this->write_pos.store(next_write_pos, memory_order_release);
-			return true;
-		}
-
-		return false;
-	}
-
-	bool try_pop(T* out){
-		auto cur_read_pos = this->read_pos.load(memory_order_relaxed);
-		if(cur_read_pos == this->write_pos.load(memory_order_acquire)){
-			return false;
-		}
-
-		if(out != nullptr){
-			*out = move(this->data[cur_read_pos]);
-		}
-
-		auto next_read_pos = (cur_read_pos + 1) & (capacity - 1);
-		this->read_pos.store(next_read_pos, memory_order_release);
-		return true;
-	}
-};
 
 // init_spsc_queue()
 
+
+struct Deadline {
+	TimeTick last_tick{0};
+	TimeTick deadline{0};
+	RawTask* task;
+
+	// bool check(){}
+};
+
+
 int main(){
+	start = tick_now();
 	usize arena_size = 24 * mem_kilobyte;
 	u8* arena_data = new u8[arena_size];
 
 	Arena arena = arena_from_buffer({arena_data, arena_size});
 	printf("Sizeof RawTask: %tu\n", sizeof(RawTask));
 
-	make_tmr_task(&arena, 2 * mem_kilobyte, somebody, nullptr, 0);
+	f64 nano_per_tick = 1.0e9 / f64(tick_frequency());
+	printf("Frequency: %tu\n", tick_frequency());
+	printf("ns/tick: %g\n", nano_per_tick);
+
+	auto t = make_tmr_task(&arena, 2 * mem_kilobyte, somebody, nullptr, 0);
+	t->run();
+
+	t->join();
 
 	// for(usize i = 0; i < 20; i++){
 	// 	auto task = make_raw_task(&arena, somebody, nullptr, 0);
@@ -101,6 +77,5 @@ int main(){
 	// for(usize i = 0; i < runnables.len; i++){
 	// 	runnables[i]->join();
 	// }
-
 }
 

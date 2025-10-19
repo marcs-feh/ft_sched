@@ -38,3 +38,8 @@ void RawTask::_join_and_deinit_specifics(){
 
 static_assert(sizeof(RawTaskPlatformSpecific) <= sizeof(RawTaskPlatformSpecificData), "Platform specific struct has insufficient size");
 static_assert(alignof(RawTaskPlatformSpecific) <= alignof(RawTaskPlatformSpecificData), "Platform specific struct has insufficient size");
+
+TimeTick tick_now(){
+	unimplemented();
+}
+

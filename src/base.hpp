@@ -742,69 +742,44 @@ struct Queue {
 	}
 };
 
-//// Sync Queue
+//// SPSC queue
+constexpr usize destructive_interference_size = 64;
+
 template<class T>
-struct SyncQueue {
-	Queue<T> inner{};
-	Spinlock spinner{};
+struct SPSC_Queue {
+	T* data;
+	usize capacity;
 
-	usize space(){
-		spinner.lock();
-		auto result = this->inner.space();
-		spinner.unlock();
-		return result;
+	alignas(destructive_interference_size)
+	Atomic<usize> read_pos{0};
+	alignas(destructive_interference_size)
+	Atomic<usize> write_pos{0};
+
+	bool try_push(T elem){
+		auto cur_write_pos = this->write_pos.load(memory_order_relaxed);
+		auto next_write_pos = (cur_write_pos + 1) & (capacity - 1); // NOTE: Fast modulo for powers of 2
+
+		if(next_write_pos != this->read_pos.load(memory_order_acquire)){
+			this->data[write_pos] = elem;
+			this->write_pos.store(next_write_pos, memory_order_release);
+			return true;
+		}
+
+		return false;
 	}
 
-	bool push_back(T const& elem){
-		spinner.lock();
-		auto result = this->inner.push_back(elem);
-		spinner.unlock();
-		return result;
-	}
+	bool try_pop(T* out){
+		auto cur_read_pos = this->read_pos.load(memory_order_relaxed);
+		if(cur_read_pos == this->write_pos.load(memory_order_acquire)){
+			return false;
+		}
 
-	bool push_front(T const& elem){
-		spinner.lock();
-		auto result = this->inner.push_front(elem);
-		spinner.unlock();
-		return result;
-	}
+		if(out != nullptr){
+			*out = move(this->data[cur_read_pos]);
+		}
 
-	bool pop_back(){
-		spinner.lock();
-		auto result = this->inner.pop_back();
-		spinner.unlock();
-		return result;
+		auto next_read_pos = (cur_read_pos + 1) & (capacity - 1);
+		this->read_pos.store(next_read_pos, memory_order_release);
+		return true;
 	}
-
-	bool pop_back(T* out){
-		spinner.lock();
-		auto result = this->inner.pop_back(out);
-		spinner.unlock();
-		return result;
-	}
-
-	bool pop_front(){
-		spinner.lock();
-		auto result = this->inner.pop_front();
-		spinner.unlock();
-		return result;
-	}
-
-	bool pop_front(T* out){
-		spinner.lock();
-		auto result = this->inner.pop_front(out);
-		spinner.unlock();
-		return result;
-	}
-
 };
-
-template<class T>
-SyncQueue<T>* make_sync_queue(Arena* a, usize cap){
-	auto queue = make<SyncQueue<T>>(a);
-	auto buf = make_slice<T>(a, cap);
-
-	queue->inner.data = buf.data;
-	queue->inner.cap = cap;
-	return queue;
-}

@@ -1,6 +1,6 @@
 #include "task.hpp"
 
-bool init_raw_task(RawTask* task, Arena* a, RawTaskFunc func, void* args, usize arg_size, usize arg_align){
+bool init_raw_task(RawTask* task, Arena* a, RawTaskFunc func, void* args, usize args_, usize args_align){
 	ensure(task != nullptr, "Must be non-null");
 
 	auto restore = a->offset;
@@ -10,9 +10,9 @@ bool init_raw_task(RawTask* task, Arena* a, RawTaskFunc func, void* args, usize 
 	task->_status.store(TaskStatus_Initialized);
 
 	if(args != nullptr){
-		task->args = a->alloc(arg_size, arg_align);
+		task->args = a->alloc(args_, args_align);
 		if(task->args != nullptr){
-			mem_copy(task->args, args, arg_size);
+			mem_copy(task->args, args, args_);
 		}
 		else {
 			a->offset = restore;
@@ -23,11 +23,11 @@ bool init_raw_task(RawTask* task, Arena* a, RawTaskFunc func, void* args, usize 
 	return true;
 }
 
-RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args, usize arg_size, usize arg_align){
+RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args, usize args_size, usize args_align){
 	auto restore = a->offset;
 	auto task = make<RawTask>(a);
 
-	if(!init_raw_task(task, a, func, args, arg_size, arg_align)){
+	if(!init_raw_task(task, a, func, args, args_size, args_align)){
 		a->offset = restore;
 		return nullptr;
 	}
@@ -48,9 +48,9 @@ bool init_tmr_task(TMR_Task* task, Arena* a, u32 subtask_arena_size, RawTaskFunc
 		return false;
 	}
 
-	auto init_ok = init_raw_task(&task->task0, arena0, func, args, arg_size, arg_align)
-		&& init_raw_task(&task->task1, arena1, func, args, arg_size, arg_align)
-		&& init_raw_task(&task->task2, arena2, func, args, arg_size, arg_align);
+	auto init_ok = init_raw_task(&task->task0, arena0, func, args, args_size, args_align)
+		&& init_raw_task(&task->task1, arena1, func, args, args_size, args_align)
+		&& init_raw_task(&task->task2, arena2, func, args, args_size, args_align);
 
 	if(!init_ok){
 		a->offset = restore;
