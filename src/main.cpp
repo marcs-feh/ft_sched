@@ -24,12 +24,6 @@ void print_slice(Slice<T> slice, char const* elem_fmt){
 	} printf("]\n");
 }
 
-// template<TaskBody Fn> [[nodiscard]]
-// Executable* make_task(Arena* a, Fn body){
-// 	auto t = make<Task<Fn>>(a, body);
-// 	return t;
-// }
-
 static
 i32 randint(i32 a, i32 b){
     return (rand() % (b - a + 1)) + a;
@@ -103,8 +97,66 @@ struct Pool {
 	u16 first_free;
 };
 
-// struct DeadlineWatcher {
+
+// template<class Output>
+// struct SimpleTask {
+// 	RawTask raw;
+
+// 	void run(){
+// 	}
+
+// 	Output result(){
+// 	}
+
 // };
+
+// template<typename T>
+// struct Option {
+// 	union {
+// 		T _value;
+// 	};
+// 	bool _has_value = false;
+
+// 	T get(){
+// 		if(!_has_value){
+// 			panic("get() on empty option");
+// 		}
+// 	}
+
+// 	Option() : _has_value{false} {}
+
+// 	Option(T&& v)
+// 		: _value{move(v)}
+// 		, _has_value{true} {}
+	
+// 	Option(T const& v){
+// 		: _value{v}
+// 		, _has_value{true} {}
+// 	}
+
+// 	Option(Option<T>&& other)
+// 		, _has_value{exchange(other._has_value, false)}
+// 	{
+// 		if(_has_value){
+// 			new (&_value) 
+// 		}
+// 	}
+	
+
+// 	Option<T>* drop(){
+// 		if(_has_value){
+// 			_value.~T();
+// 		}
+// 		_has_value = false;
+// 		return this;
+// 	}
+
+// 	~Option(){
+// 		drop();
+// 	}
+
+// };
+
 
 int main(){
 	srand(tick_now());

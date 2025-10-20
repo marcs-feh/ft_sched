@@ -44,6 +44,7 @@ struct RawTask : Task {
 	u32 args_size;
 	Atomic<TaskStatus> _status = TaskStatus_Initialized;
 	void* result = nullptr;
+	usize result_size = 0;
 
 	RawTaskPlatformSpecificData _specific{};
 

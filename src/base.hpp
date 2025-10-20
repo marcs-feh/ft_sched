@@ -92,10 +92,16 @@ static_assert(AtomicUsize::is_always_lock_free, "Expected usize to be lock-free"
 static_assert(AtomicIsize::is_always_lock_free, "Expected isize to be lock-free");
 static_assert(AtomicBool::is_always_lock_free, "Expected bool to be lock-free");
 
-
-
-
 //// Type traits
+
+// Type tag used to differentiate operator new overloads and to ensure valid union active members
+template<typename T>
+struct Nat {};
+
+// Custom tagged operator new overload, to avoid clashes with other library defs and not need to include <new>
+inline void *operator new(decltype(sizeof 0), void* ptr, Nat) {
+	return ptr;
+}
 
 template<typename T>
 struct Identity { using Type = T; };
@@ -112,15 +118,18 @@ template<typename T> struct RemoveReferenceImpl<T&&> { using Type = T; };
 
 // Add references to types
 // NOTE: auto = ... evaluates to true or false, so we only add references to referenceable types
+
 template<typename T, auto = Referenceable<T>>
 struct AddLValueReferenceImpl { using Type = T; };
 
+// Specialization to only add l-value reference for Referenceable types
 template<typename T>
 struct AddLValueReferenceImpl<T, true> { using Type = T&; };
 
 template<typename T, auto = Referenceable<T>>
 struct AddRValueReferenceImpl { using Type = T; };
 
+// Specialization to only add r-value reference for Referenceable types
 template<typename T>
 struct AddRValueReferenceImpl<T, true> { using Type = T&&; };
 }
