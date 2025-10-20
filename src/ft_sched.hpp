@@ -42,14 +42,11 @@ struct Duration {
 	#define X(Op) constexpr bool operator Op(Duration d) const { return this->_value Op d._value; }
 		X(<) X(>) X(<=) X(>=) X(==) X(!=)
 	#undef X
-
 };
 
 TimeTick tick_now();
 
 usize tick_frequency();
-
-// Duration tick_diff(TimeTick start, TimeTick end);
 
 static inline
 Duration tick_diff(TimeTick a, TimeTick b){
