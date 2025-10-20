@@ -48,10 +48,17 @@ TimeTick tick_now();
 
 usize tick_frequency();
 
+// static inline
+// Duration tick_diff(TimeTick a, TimeTick b){
+// 	isize diff = a - b;
+// 	return {diff / isize(tick_frequency() / Duration::scale)};
+// }
+
 static inline
 Duration tick_diff(TimeTick a, TimeTick b){
-	isize diff = a - b;
-	return {diff / isize(tick_frequency() / Duration::scale)};
+	i64 diff = i64(a) - i64(b);
+	auto time_diff = static_cast<isize>((diff * i64(Duration::scale)) / i64(tick_frequency()));
+	return {time_diff};
 }
 
 void sleep_for(Duration d);

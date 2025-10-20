@@ -6,7 +6,7 @@ function generate_ninja()
 	local cc = 'clang++'
 	local cflags = {'-std=c++20', '-fwrapv', '-fno-strict-aliasing', '-fno-rtti', '-fno-exceptions'}
 	local wflags = {'-Wall', '-Wextra', '-Werror=return-type'}
-	local ldflags = {}
+	local ldflags = {'-fuse-ld=lld'}
 
 	local sb = Builder:new()
 	local sources = {
@@ -19,9 +19,11 @@ function generate_ninja()
 	if platform == 'linux' then
 		cflags[#cflags+1] = '-fPIC'
 		sources[#sources+1] = 'platform_linux.cpp'
+		ldflags[#ldflags+1] = '-fuse-ld=mold'
 	elseif platform == 'windows' then
 		cflags[#cflags+1] = '-D_CRT_SECURE_NO_WARNINGS'
 		sources[#sources+1] = 'platform_windows.cpp'
+		ldflags[#ldflags+1] = '-fuse-ld=lld'
 	end
 
 	if build_mode == 'debug' then

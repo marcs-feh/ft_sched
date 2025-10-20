@@ -83,7 +83,7 @@ void print_info(){
 }
 
 void somebody(RawTask* t){
-	sleep_for(Duration::from_milli(499));
+	sleep_for(Duration::from_milli(480));
 	reset_watchdog();
 	sleep_for(Duration::from_milli(450));
 	printf("Hello from task %p, it's been: %td us\n", t, tick_diff(tick_now(), start).to_micro());

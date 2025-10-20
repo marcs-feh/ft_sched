@@ -69,27 +69,6 @@ usize tick_frequency(){
 	return _tick_frequency;
 }
 
-TimeTick duration_to_tick(Duration d){
-	auto ticks_per_duration = f64(tick_frequency()) / f64(Duration::scale);
-	auto tick_count = usize(f64(d._value) * ticks_per_duration);
-
-	return tick_count;
-}
-
-// Duration tick_diff(TimeTick a, TimeTick b){
-// 	f64 diff = f64(a) - f64(b);
-// 	f64 tick_duration = f64(Duration::scale) / f64(tick_frequency());
-// 	auto diff = static_cast<isize>(diff * tick_duration);
-// 	return {diff};
-// }
-
-// Hz -> T/s
-// us -> s/1e6
-// tick / F -> s:
-//	s / Scale -> s/1e6
-	// tick / F / Scale
-// F / Scale -> (T/s) / (1e6) -> (T/ (1e6 s))
-
 void sleep_for(Duration d){
 	constexpr f64 milliseconds_per_duration = 1000.0 / static_cast<f64>(Duration::scale);
 
