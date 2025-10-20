@@ -76,14 +76,10 @@ void reset_watchdog(){
 }
 ////-----------------------
 
-
 static
 void print_info(){
-	f64 tick_duration = 1.0 / f64(tick_frequency());
-
 	printf("Address Width:  %zu-bit\n", sizeof(void*) * 8);
 	printf("Tick Frequency: %tu Hz\n", tick_frequency());
-	printf("Tick Duration:  %g ms\n", tick_duration * 1'000);
 }
 
 void somebody(RawTask* t){
@@ -92,6 +88,23 @@ void somebody(RawTask* t){
 	sleep_for(Duration::from_milli(450));
 	printf("Hello from task %p, it's been: %td us\n", t, tick_diff(tick_now(), start).to_micro());
 }
+
+template<typename T>
+struct PoolSlot {
+	union {
+		T data;
+		PoolSlot<T>* next;
+	};
+};
+
+template<typename T>
+struct Pool {
+	PoolSlot<T>* slot;
+	u16 first_free;
+};
+
+// struct DeadlineWatcher {
+// };
 
 int main(){
 	srand(tick_now());
