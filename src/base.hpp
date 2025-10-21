@@ -95,7 +95,6 @@ static_assert(AtomicBool::is_always_lock_free, "Expected bool to be lock-free");
 //// Type traits
 
 // Type tag used to differentiate operator new overloads and to ensure valid union active members
-template<typename T>
 struct Nat {};
 
 // Custom tagged operator new overload, to avoid clashes with other library defs and not need to include <new>
