@@ -29,9 +29,6 @@ i32 randint(i32 a, i32 b){
     return (rand() % (b - a + 1)) + a;
 }
 
-TimeTick start = 0;
-
-
 // init_spsc_queue()
 
 struct Deadline {
@@ -76,6 +73,7 @@ void print_info(){
 	printf("Tick Frequency: %tu Hz\n", tick_frequency());
 }
 
+TimeTick start = 0;
 void somebody(RawTask* t){
 	sleep_for(Duration::from_milli(480));
 	reset_watchdog();
@@ -97,7 +95,6 @@ struct Pool {
 	u16 first_free;
 };
 
-
 // template<class Output>
 // struct SimpleTask {
 // 	RawTask raw;
@@ -110,52 +107,52 @@ struct Pool {
 
 // };
 
-// template<typename T>
-// struct Option {
-// 	union {
-// 		T _value;
-// 	};
-// 	bool _has_value = false;
+template<typename T>
+struct Option {
+	union {
+		T _value;
+		Nat _nat;
+	};
+	bool _has_value = false;
 
-// 	T get(){
-// 		if(!_has_value){
-// 			panic("get() on empty option");
-// 		}
-// 	}
+	T get(){
+		if(!_has_value){
+			panic("get() on empty option");
+		}
+	}
 
-// 	Option() : _has_value{false} {}
+	Option() : _has_value{false}, _nat{} {}
 
-// 	Option(T&& v)
-// 		: _value{move(v)}
-// 		, _has_value{true} {}
+	Option(T&& v)
+		: _value{move(v)}
+		, _has_value{true} {}
 	
-// 	Option(T const& v){
-// 		: _value{v}
-// 		, _has_value{true} {}
-// 	}
+	Option(T const& v){
+		: _value{v}
+		, _has_value{true} {}
+	}
 
-// 	Option(Option<T>&& other)
-// 		, _has_value{exchange(other._has_value, false)}
-// 	{
-// 		if(_has_value){
-// 			new (&_value) 
-// 		}
-// 	}
-	
+	// Option(Option<T>&& other)
+	// 	, _has_value{exchange(other._has_value, false)}
+	// {
+	// 	if(_has_value){
+	// 		new (drop()->value) T{}
+	// 	}
+	// }
 
-// 	Option<T>* drop(){
-// 		if(_has_value){
-// 			_value.~T();
-// 		}
-// 		_has_value = false;
-// 		return this;
-// 	}
+	attribute_force_inline
+	constexpr Option<T>* drop(){
+		if(_has_value){
+			_value.~T();
+		}
+		_has_value = false;
+		return this;
+	}
 
-// 	~Option(){
-// 		drop();
-// 	}
-
-// };
+	~Option(){
+		drop();
+	}
+};
 
 
 int main(){

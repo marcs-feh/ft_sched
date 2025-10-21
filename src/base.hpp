@@ -305,7 +305,7 @@ template<class T, typename ... Args> [[nodiscard]]
 T* make(Arena* a, Args&& ... args){
 	T* p = (T*)a->alloc(sizeof(T), alignof(T));
 	if(!p){ return nullptr; }
-	new (p) T(args...);
+	new (p, Nat{}) T(args...);
 	return p;
 }
 
@@ -321,7 +321,7 @@ Slice<T> make_slice(Arena* a, usize n){
 	if(!p){ return Slice<T>{}; }
 	// if constexpr(!IsTriviallyConstructible<T>)
 	for(usize i = 0; i < n; i++){
-		new (&p[i]) T();
+		new (&p[i], Nat{}) T();
 	}
 	return Slice<T>{p, n};
 }
@@ -356,7 +356,7 @@ struct List {
 			}
 		}
 
-		new (&this->data[this->len]) T(elem);
+		new (&this->data[this->len], Nat{}) T(elem);
 		this->len += 1;
 		return true;
 	}
@@ -392,7 +392,7 @@ struct List {
 		}
 
 		mem_copy(&this->data[idx + 1], &this->data[idx], sizeof(T) * (this->len - idx));
-		new (&this->data[idx]) T(elem);
+		new (&this->data[idx], Nat{}) T(elem);
 		this->len += 1;
 		return true;
 	}
@@ -517,7 +517,7 @@ List<T> make_list(Arena* a){
 // 		}
 // 		mem_copy(&this->data[idx + 1], &this->data[idx], sizeof(T) * (this->len - idx));
 
-// 		new (&this->data[this->len]) T(elem);
+// 		new (&this->data[this->len], Nat{}) T(elem);
 // 		this->len += 1;
 // 		return true;
 // 	}
