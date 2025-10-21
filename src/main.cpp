@@ -35,10 +35,7 @@ struct Deadline {
 	TimeTick last_tick{0};
 	TimeTick deadline{0};
 	RawTask* task;
-
-	// bool check(){
 };
-
 
 Arena permanent_arena;
 u8 permanent_arena_data[4 * mem_kilobyte];
@@ -95,62 +92,24 @@ struct Pool {
 	u16 first_free;
 };
 
-// template<class Output>
-// struct SimpleTask {
-// 	RawTask raw;
+template<typename F, typename Output>
+concept Returns = requires(F f){
+	{ f() } -> SameAs<Output>;
+};
 
-// 	void run(){
-// 	}
 
-// 	Output result(){
-// 	}
+template<typename Output, Returns<Output> TaskFunc>
+struct SimpleTask {
+	RawTask _task{};
+	TaskFunc _func;
+	Output _result;
 
-// };
-
-template<typename T>
-struct Option {
-	union {
-		T _value;
-		Nat _nat;
-	};
-	bool _has_value = false;
-
-	T get(){
-		if(!_has_value){
-			panic("get() on empty option");
-		}
+	static void _simple_task_wrapper(RawTask* t){
+		auto self = (SimpleTask<Output, TaskFunc>*)t->args;
+		self->_result = self->_func();
 	}
 
-	Option() : _has_value{false}, _nat{} {}
-
-	Option(T&& v)
-		: _value{move(v)}
-		, _has_value{true} {}
-	
-	Option(T const& v){
-		: _value{v}
-		, _has_value{true} {}
-	}
-
-	// Option(Option<T>&& other)
-	// 	, _has_value{exchange(other._has_value, false)}
-	// {
-	// 	if(_has_value){
-	// 		new (drop()->value) T{}
-	// 	}
-	// }
-
-	attribute_force_inline
-	constexpr Option<T>* drop(){
-		if(_has_value){
-			_value.~T();
-		}
-		_has_value = false;
-		return this;
-	}
-
-	~Option(){
-		drop();
+	void run(){
 	}
 };
 
@@ -158,7 +117,6 @@ struct Option {
 int main(){
 	srand(tick_now());
 	permanent_arena = arena_from_buffer(Slice<u8>{&permanent_arena_data[0], sizeof(permanent_arena_data)});
-
 	start = tick_now();
 	usize arena_size = 24 * mem_kilobyte;
 	u8* arena_data = new u8[arena_size];

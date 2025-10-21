@@ -166,6 +166,14 @@ T&& forward(RemoveReference<T>& arg) {
 	return static_cast<T&&>(arg);
 }
 
+template<typename T, typename U = T> constexpr
+T exchange(T& x, U&& v){
+	T r = move(x);
+	x = forward<U>(v);
+	return r;
+}
+
+
 //// Defer
 namespace defer_detail {
 template<typename F>
@@ -199,10 +207,68 @@ bool ensure_ex(bool pred, char const* msg, char const* filename, int line);
 #define panic(Msg) panic_ex((Msg), __FILE__, __LINE__)
 #define unimplemented() panic_ex("Unimplemented", __FILE__, __LINE__)
 
+//// Option
+template<typename T>
+struct Option {
+	union {
+		T _value;
+		Nat _nat;
+	};
+	bool _has_value = false;
+
+	attribute_force_inline constexpr auto ok() const { return _has_value; }
+
+	[[nodiscard]] constexpr
+	T unwrap(){
+		if(!_has_value){
+			panic("unwrap() on empty option");
+		}
+		auto v = move(_value);
+		drop();
+		return v;
+	}
+
+	attribute_force_inline constexpr
+	Option<T>* drop(){
+		if(_has_value){
+			_value.~T();
+		}
+		_has_value = false;
+		return this;
+	}
+
+	Option() : _nat{}, _has_value{false} {}
+
+	Option(T&& v)
+		: _value{move(v)}
+		, _has_value{true} {}
+
+	Option(Option<T>&& other)
+		: _nat{}
+		, _has_value{exchange(other._has_value, false)}
+	{
+		if(_has_value){
+			new (&_value, Nat{}) T{move(other._value)};
+			other.drop();
+		}
+	}
+
+	constexpr
+	Option<T>& operator=(T&& v){
+		return *new(drop(), Nat{}) Option{move(v)};
+	}
+
+	constexpr
+	Option<T>& operator=(Option<T>&& o){
+		return *new(drop(), Nat{}) Option{move(o)};
+	}
+
+	~Option(){
+		drop();
+	}
+};
+
 //// Slice
-
-struct RawSlice;
-
 template<class T>
 struct Slice {
 	T* data;
