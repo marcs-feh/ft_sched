@@ -233,6 +233,23 @@ struct Option {
 		return v;
 	}
 
+	[[nodiscard]] constexpr
+	T unwrap_unchecked(){
+		auto v = move(_value);
+		drop();
+		return v;
+	}
+
+	template<typename U>
+	T unwrap_or(U&& alt){
+		if(!_has_value){
+			return forward<U>(alt);
+		}
+		else {
+			return unwrap();
+		}
+	}
+
 	attribute_force_inline constexpr
 	Option<T>* drop(){
 		if(_has_value){
@@ -836,13 +853,14 @@ struct SPSC_Queue {
 	alignas(destructive_interference_size)
 	Atomic<usize> write_pos;
 
-	template<ConvertibleTo<T> U>
-	bool try_push(U&& elem){
+	template<typename ...Args>
+	bool try_emplace(Args&& ...args){
 		auto cur_write_pos = this->write_pos.load(memory_order_relaxed);
-		auto next_write_pos = (cur_write_pos + 1) & (capacity - 1); // NOTE: Fast modulo for powers of 2
+		auto next_write_pos = (cur_write_pos + 1) % capacity;
 
 		if(next_write_pos != this->read_pos.load(memory_order_acquire)){
-			this->data[write_pos] = forward<U>(elem);
+			new(&this->data[write_pos], Nat{}) T{forward<Args>(args)...};
+
 			this->write_pos.store(next_write_pos, memory_order_release);
 			return true;
 		}
@@ -850,7 +868,18 @@ struct SPSC_Queue {
 		return false;
 	}
 
-	void push(){}
+	template<ConvertibleTo<T> U>
+	bool try_push(U&& elem){
+		return try_emplace(forward<U>(elem));
+	}
+
+	template<ConvertibleTo<T> U>
+	void push(U&& elem){
+		auto ok = try_emplace(forward<U>(elem));
+		while(!ok){
+			ok = try_push(forward<U>(elem));
+		}
+	}
 
 	Option<T> pop(){
 		auto cur_read_pos = this->read_pos.load(memory_order_relaxed);
@@ -860,9 +889,20 @@ struct SPSC_Queue {
 
 		auto elem = Option<T>{move(this->data[cur_read_pos])};
 
-		auto next_read_pos = (cur_read_pos + 1) & (capacity - 1);
+		this->data[cur_read_pos].~T();
+
+		auto next_read_pos = (cur_read_pos + 1) % capacity;
 		this->read_pos.store(next_read_pos, memory_order_release);
 		return elem;
+	}
+
+	bool pop_into(T* out){
+		auto elem = pop();
+		auto ok = elem._has_value;
+		if(ok){
+			*out = elem.unwrap_unchecked();
+		}
+		return ok;
 	}
 
 	SPSC_Queue(SPSC_Queue const&) = delete;
@@ -876,33 +916,8 @@ struct SPSC_Queue {
 		, write_pos{0} {}
 };
 
-// This template hack is required to prevent implict conversions
-template<SameAs<usize> UInt>
-constexpr UInt next_pow2(UInt x) {
-	x -= 1;
-
-	// Common for > 8 bit
-	x |= x >> 1;
-	x |= x >> 2;
-	x |= x >> 4;
-
-	if constexpr ((sizeof(UInt) * 8) >= 16){
-		x |= x >> 8;
-	}
-
-	if constexpr((sizeof(UInt) * 8) >= 32)
-		x |= x >> 16;
-
-	if constexpr((sizeof(UInt) * 8) >= 64)
-		x |= x >> 32;
-
-	x += 1;
-	return x;
-}
-
 template<typename T>
 SPSC_Queue<T>* make_spsc_queue(Arena* a, usize capacity){
-	capacity = next_pow2(capacity);
 	auto restore = a->offset;
 	auto queue = make<SPSC_Queue<T>>(a);
 	auto data = (T*)a->alloc(sizeof(T) * capacity, alignof(T));
@@ -914,7 +929,34 @@ SPSC_Queue<T>* make_spsc_queue(Arena* a, usize capacity){
 		return nullptr;
 	}
 
-
 	return queue;
+}
+
+
+// This template hack is required to prevent implict conversions
+template<SameAs<usize> UInt>
+constexpr UInt next_pow2(UInt x) {
+	if(x == 0){ return 1; }
+
+	constexpr usize bit_width = sizeof(UInt) * 8;
+	static_assert(bit_width >= 8 && bit_width <= 64, "Invalid bit width");
+	x -= 1;
+
+	// Common for > 8 bit
+	x |= x >> 1;
+	x |= x >> 2;
+	x |= x >> 4;
+
+	if constexpr(bit_width >= 16)
+		x |= x >> 8;
+
+	if constexpr(bit_width >= 32)
+		x |= x >> 16;
+
+	if constexpr(bit_width >= 64)
+		x |= x >> 32;
+
+	x += 1;
+	return x;
 }
 
