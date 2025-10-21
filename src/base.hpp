@@ -151,6 +151,11 @@ inline constexpr auto same_type<T, T> = true;
 template<typename A, typename B>
 concept SameAs = same_type<A, B>;
 
+template<typename From, typename To>
+concept ConvertibleTo = requires(From x){
+	{ static_cast<To>(x) };
+};
+
 template<typename T> attribute_force_inline constexpr
 RemoveReference<T>&& move(T&& arg) {
 	return static_cast<RemoveReference<T>&&>(arg);
@@ -237,12 +242,15 @@ struct Option {
 		return this;
 	}
 
+	constexpr
 	Option() : _nat{}, _has_value{false} {}
 
+	constexpr
 	Option(T&& v)
 		: _value{move(v)}
 		, _has_value{true} {}
 
+	constexpr
 	Option(Option<T>&& other)
 		: _nat{}
 		, _has_value{exchange(other._has_value, false)}
@@ -823,18 +831,18 @@ template<class T>
 struct SPSC_Queue {
 	T* data;
 	usize capacity;
-
 	alignas(destructive_interference_size)
-	Atomic<usize> read_pos{0};
+	Atomic<usize> read_pos;
 	alignas(destructive_interference_size)
-	Atomic<usize> write_pos{0};
+	Atomic<usize> write_pos;
 
-	bool try_push(T elem){
+	template<ConvertibleTo<T> U>
+	bool try_push(U&& elem){
 		auto cur_write_pos = this->write_pos.load(memory_order_relaxed);
 		auto next_write_pos = (cur_write_pos + 1) & (capacity - 1); // NOTE: Fast modulo for powers of 2
 
 		if(next_write_pos != this->read_pos.load(memory_order_acquire)){
-			this->data[write_pos] = elem;
+			this->data[write_pos] = forward<U>(elem);
 			this->write_pos.store(next_write_pos, memory_order_release);
 			return true;
 		}
@@ -842,18 +850,71 @@ struct SPSC_Queue {
 		return false;
 	}
 
-	bool try_pop(T* out){
+	void push(){}
+
+	Option<T> pop(){
 		auto cur_read_pos = this->read_pos.load(memory_order_relaxed);
 		if(cur_read_pos == this->write_pos.load(memory_order_acquire)){
-			return false;
+			return {};
 		}
 
-		if(out != nullptr){
-			*out = move(this->data[cur_read_pos]);
-		}
+		auto elem = Option<T>{move(this->data[cur_read_pos])};
 
 		auto next_read_pos = (cur_read_pos + 1) & (capacity - 1);
 		this->read_pos.store(next_read_pos, memory_order_release);
-		return true;
+		return elem;
 	}
+
+	SPSC_Queue(SPSC_Queue const&) = delete;
+
+	SPSC_Queue(SPSC_Queue&& q) = delete;
+
+	SPSC_Queue()
+		: data{nullptr}
+		, capacity{0}
+		, read_pos{0}
+		, write_pos{0} {}
 };
+
+// This template hack is required to prevent implict conversions
+template<SameAs<usize> UInt>
+constexpr UInt next_pow2(UInt x) {
+	x -= 1;
+
+	// Common for > 8 bit
+	x |= x >> 1;
+	x |= x >> 2;
+	x |= x >> 4;
+
+	if constexpr ((sizeof(UInt) * 8) >= 16){
+		x |= x >> 8;
+	}
+
+	if constexpr((sizeof(UInt) * 8) >= 32)
+		x |= x >> 16;
+
+	if constexpr((sizeof(UInt) * 8) >= 64)
+		x |= x >> 32;
+
+	x += 1;
+	return x;
+}
+
+template<typename T>
+SPSC_Queue<T>* make_spsc_queue(Arena* a, usize capacity){
+	capacity = next_pow2(capacity);
+	auto restore = a->offset;
+	auto queue = make<SPSC_Queue<T>>(a);
+	auto data = (T*)a->alloc(sizeof(T) * capacity, alignof(T));
+
+	queue->data = data;
+	queue->capacity = capacity;
+	if(!queue || !data){
+		a->offset = restore;
+		return nullptr;
+	}
+
+
+	return queue;
+}
+

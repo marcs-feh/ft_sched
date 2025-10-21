@@ -113,7 +113,6 @@ struct SimpleTask {
 	}
 };
 
-
 int main(){
 	srand(tick_now());
 	permanent_arena = arena_from_buffer(Slice<u8>{&permanent_arena_data[0], sizeof(permanent_arena_data)});
@@ -124,11 +123,14 @@ int main(){
 	Arena arena = arena_from_buffer(Slice<u8>{&arena_data[0], arena_size});
 	print_info();
 
-	auto wd = make_raw_task(&arena, watchdog_timer_func, nullptr, 0);
-	wd->run();
+	auto queue = make_spsc_queue<int>(&arena, 24);
+	printf("%p\n", queue);
 
-	auto t = make_tmr_task(&arena, 2 * mem_kilobyte, somebody, nullptr, 0);
-	t->run();
+	// auto wd = make_raw_task(&arena, watchdog_timer_func, nullptr, 0);
+	// wd->run();
 
-	t->join();
+	// auto t = make_tmr_task(&arena, 2 * mem_kilobyte, somebody, nullptr, 0);
+	// t->run();
+
+	// t->join();
 }
