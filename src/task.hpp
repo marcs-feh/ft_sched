@@ -27,11 +27,8 @@ struct RawTask;
 using RawTaskFunc = void (*)(RawTask* t);
 
 struct RawTaskPlatformSpecificData {
-	uintptr data[2];
+	alignas(void*) u8 data[sizeof(void*) * 2];
 };
-
-// TODO(marcos): Just make this enforced
-constexpr usize default_argument_alignment = alignof(void*) * 2;
 
 struct RawTask {
 	RawTaskFunc func = nullptr;

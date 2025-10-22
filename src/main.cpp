@@ -101,15 +101,11 @@ template<typename Output, Returns<Output> TaskFunc>
 struct SimpleTask {
 	RawTask _task;
 	TaskFunc _func;
-	union {
-		Output _result;
-		Nat _nat_result;
-	};
+	Option<Output> _result;
 
 	static void _simple_task_wrapper(RawTask* t){
 		auto self = (SimpleTask<Output, TaskFunc>*)t->args;
-		self->_result = Output{ forward<Output>(self->_func()) };
-		printf("BYE!\n");
+		self->_result = Output{ self->_func() };
 	}
 
 	void run(){
@@ -119,13 +115,12 @@ struct SimpleTask {
 
 	Output result(){
 		_task.join();
-		return _result;
+		return _result.unwrap();
 	}
 
 	explicit SimpleTask(TaskFunc f)
 		: _task{}
-		, _func{f}
-		, _nat_result{} {}
+		, _func{f} {}
 };
 
 template<typename F>
@@ -146,13 +141,13 @@ int main(){
 	Arena arena = arena_from_buffer(Slice<u8>{&arena_data[0], arena_size});
 	print_info();
 
-	auto foo = make_simple_task(&arena, []() -> i32 {
+	auto foo = make_simple_task(&arena, []() {
 		printf("Hello\n");
-		return 1;
+		return 0;
 	});
 
 	foo->run();
-	int n = foo->result();
+	int n = ::move(foo->result());
 	printf("Foo: %d\n", n);
 	printf("Sizeof foo: %td", sizeof(*foo));
 }

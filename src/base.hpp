@@ -173,7 +173,7 @@ T&& forward(RemoveReference<T>& arg) {
 
 template<typename T, typename U = T> constexpr
 T exchange(T& x, U&& v){
-	T r = move(x);
+	T r = ::move(x);
 	x = forward<U>(v);
 	return r;
 }
@@ -185,7 +185,7 @@ template<typename F>
 struct DeferredCall {
 	F f;
 
-	attribute_force_inline DeferredCall(F&& f) : f(move(f)){}
+	attribute_force_inline DeferredCall(F&& f) : f(::move(f)){}
 	
 	attribute_force_inline ~DeferredCall(){ f(); }
 };
@@ -228,14 +228,14 @@ struct Option {
 		if(!_has_value){
 			panic("unwrap() on empty option");
 		}
-		auto v = move(_value);
+		auto v = ::move(_value);
 		drop();
 		return v;
 	}
 
 	[[nodiscard]] constexpr
 	T unwrap_unchecked(){
-		auto v = move(_value);
+		auto v = ::move(_value);
 		drop();
 		return v;
 	}
@@ -264,7 +264,7 @@ struct Option {
 
 	constexpr
 	Option(T&& v)
-		: _value{move(v)}
+		: _value{::move(v)}
 		, _has_value{true} {}
 
 	constexpr
@@ -273,19 +273,19 @@ struct Option {
 		, _has_value{exchange(other._has_value, false)}
 	{
 		if(_has_value){
-			new (&_value, Nat{}) T{move(other._value)};
+			new (&_value, Nat{}) T{::move(other._value)};
 			other.drop();
 		}
 	}
 
 	constexpr
 	Option<T>& operator=(T&& v){
-		return *new(drop(), Nat{}) Option{move(v)};
+		return *new(drop(), Nat{}) Option{::move(v)};
 	}
 
 	constexpr
 	Option<T>& operator=(Option<T>&& o){
-		return *new(drop(), Nat{}) Option{move(o)};
+		return *new(drop(), Nat{}) Option{::move(o)};
 	}
 
 	~Option(){
@@ -806,8 +806,7 @@ struct SPSC_Queue {
 			return {};
 		}
 
-		auto elem = Option<T>{move(this->data[cur_read_pos])};
-
+		auto elem = Option<T>{ ::move(this->data[cur_read_pos]) };
 		this->data[cur_read_pos].~T();
 
 		auto next_read_pos = (cur_read_pos + 1) % capacity;

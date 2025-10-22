@@ -1,7 +1,5 @@
 #include "task.hpp"
 
-extern "C" { int printf(char const*, ...); }
-
 // TODO: use a sub-arena to avoid ownership issues
 void init_raw_task(RawTask* task, Arena* a, RawTaskFunc func, void* args){
 	ensure(task != nullptr, "Must be non-null");
