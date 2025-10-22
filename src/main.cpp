@@ -24,10 +24,10 @@ void print_slice(Slice<T> slice, char const* elem_fmt){
 	} printf("]\n");
 }
 
-static
-i32 randint(i32 a, i32 b){
-    return (rand() % (b - a + 1)) + a;
-}
+// static
+// i32 randint(i32 a, i32 b){
+//     return (rand() % (b - a + 1)) + a;
+// }
 
 // init_spsc_queue()
 
@@ -97,21 +97,44 @@ concept Returns = requires(F f){
 	{ f() } -> SameAs<Output>;
 };
 
-
 template<typename Output, Returns<Output> TaskFunc>
 struct SimpleTask {
-	RawTask _task{};
+	RawTask _task;
 	TaskFunc _func;
-	Output _result;
+	union {
+		Output _result;
+		Nat _nat_result;
+	};
 
 	static void _simple_task_wrapper(RawTask* t){
 		auto self = (SimpleTask<Output, TaskFunc>*)t->args;
-		self->_result = self->_func();
+		self->_result = Output{ forward<Output>(self->_func()) };
+		printf("BYE!\n");
 	}
 
 	void run(){
+		ensure(_task._status.load(memory_order_relaxed) == TaskStatus_Initialized, "Inner task has not been initialized");
+		_task.run();
 	}
+
+	Output result(){
+		_task.join();
+		return _result;
+	}
+
+	explicit SimpleTask(TaskFunc f)
+		: _task{}
+		, _func{f}
+		, _nat_result{} {}
 };
+
+template<typename F>
+auto make_simple_task(Arena* a, F&& func){
+	auto t = make<SimpleTask<decltype(func()), F>>(a, forward<F>(func));
+
+	init_raw_task(&t->_task, a, t->_simple_task_wrapper, t);
+	return t;
+}
 
 int main(){
 	srand(tick_now());
@@ -123,19 +146,14 @@ int main(){
 	Arena arena = arena_from_buffer(Slice<u8>{&arena_data[0], arena_size});
 	print_info();
 
-	auto queue = make_spsc_queue<int>(&arena, 20);
-	printf("%p\n", queue);
-	for(int i = 0; i < 100; i++){
-		if(queue->try_push(i)){
-			printf("push: %d\n", i);
-		}
-		else break;
-	}
+	auto foo = make_simple_task(&arena, []() -> i32 {
+		printf("Hello\n");
+		return 1;
+	});
 
-	int x = 0;
-	while(queue->pop_into(&x)){
-		printf("pop: %d\n", x);
-	}
-
+	foo->run();
+	int n = foo->result();
+	printf("Foo: %d\n", n);
+	printf("Sizeof foo: %td", sizeof(*foo));
 }
 

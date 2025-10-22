@@ -10,19 +10,15 @@ enum TaskStatus : u8 {
 	TaskStatus_Fault, // Or anthing above
 };
 
+template<typename Output>
 struct Task {
 	virtual void run() = 0;
 	virtual TaskStatus status() = 0;
 	virtual void join() = 0;
 	virtual void fault() = 0;
-	// virtual Arena* local_arena() = 0;
+	virtual Output poll() = 0;
 
 	virtual ~Task(){}
-};
-
-template<typename F>
-concept TaskBody = requires(F f, Task* e){
-	{ f(e) } -> SameAs<void>;
 };
 
 struct RawTask;
@@ -37,30 +33,28 @@ struct RawTaskPlatformSpecificData {
 // TODO(marcos): Just make this enforced
 constexpr usize default_argument_alignment = alignof(void*) * 2;
 
-struct RawTask : Task {
+struct RawTask {
 	RawTaskFunc func = nullptr;
 	Arena* arena = nullptr;
 	void* args = nullptr;
-	u32 args_size;
-	Atomic<TaskStatus> _status = TaskStatus_Initialized;
 	void* result = nullptr;
-	usize result_size = 0;
+	Atomic<TaskStatus> _status = TaskStatus_Undefined;
 
 	RawTaskPlatformSpecificData _specific{};
 
-	void run() override {
+	void run() {
 		_init_specifics_and_run();
 	}
 
-	TaskStatus status() override {
+	TaskStatus status() {
 		return _status;
 	}
 
-	void fault() override {
+	void fault() {
 		_status.store(TaskStatus_Fault);
 	}
 
-	void join() override {
+	void join() {
 		_join_and_deinit_specifics();
 	}
 
@@ -70,11 +64,11 @@ struct RawTask : Task {
 	void _join_and_deinit_specifics();
 };
 
-bool init_raw_task(RawTask* task, Arena* a, RawTaskFunc func, void* args, usize args_size, usize args_align = default_argument_alignment);
+void init_raw_task(RawTask* task, Arena* a, RawTaskFunc func, void* args);
 
-RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args, usize args_size, usize args_align = default_argument_alignment);
+RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args);
 
-struct TMR_Task : Task {
+struct TMR_Task {
 	Arena* arena = nullptr;
 	RawTaskFunc func = nullptr;
 	void* args = nullptr;
@@ -84,7 +78,7 @@ struct TMR_Task : Task {
 	RawTask task1{};
 	RawTask task2{};
 
-	void run() override {
+	void run() {
 		auto init = (task0.status() == TaskStatus_Initialized)
 			&& (task1.status() == TaskStatus_Initialized)
 			&& (task2.status() == TaskStatus_Initialized);
@@ -96,7 +90,7 @@ struct TMR_Task : Task {
 		this->task2.run();
 	}
 
-	TaskStatus status() override {
+	TaskStatus status() {
 		auto status0 = task0.status();
 		auto status1 = task1.status();
 		auto status2 = task2.status();
@@ -140,14 +134,14 @@ struct TMR_Task : Task {
 		return TaskStatus_Undefined;
 	}
 
-	void fault() override {
+	void fault() {
 		task0.fault();
 		task1.fault();
 		task2.fault();
 	}
 
 	// TODO: Use a timeout
-	void join() override {
+	void join() {
 		if(task0.status() != TaskStatus_Fault){
 			task0.join();
 		}
@@ -162,7 +156,7 @@ struct TMR_Task : Task {
 	}
 };
 
-bool init_tmr_task(RawTask* task, Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args, usize args_size, usize args_align = default_argument_alignment);
+bool init_tmr_task(RawTask* task, Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args);
 
-TMR_Task* make_tmr_task(Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args, usize args_size, usize args_align = default_argument_alignment);
+TMR_Task* make_tmr_task(Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args);
 

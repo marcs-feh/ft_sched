@@ -396,7 +396,7 @@ template<class T, typename ... Args> [[nodiscard]]
 T* make(Arena* a, Args&& ... args){
 	T* p = (T*)a->alloc(sizeof(T), alignof(T));
 	if(!p){ return nullptr; }
-	new (p, Nat{}) T(args...);
+	new (p, Nat{}) T(forward<Args>(args)...);
 	return p;
 }
 
@@ -410,9 +410,8 @@ template<class T> [[nodiscard]]
 Slice<T> make_slice(Arena* a, usize n){
 	auto p = (T*)a->alloc(sizeof(T) * n, alignof(T));
 	if(!p){ return Slice<T>{}; }
-	// if constexpr(!IsTriviallyConstructible<T>)
 	for(usize i = 0; i < n; i++){
-		new (&p[i], Nat{}) T();
+		new (&p[i], Nat{}) T{};
 	}
 	return Slice<T>{p, n};
 }
@@ -761,93 +760,13 @@ struct Spinlock {
 	bool try_lock();
 };
 
-//// Queue
-template<class T>
-struct Queue {
-	T* data;
-	usize cap;
-	usize len;
-	usize offset;
-
-	usize space(){
-		return cap - len;
-	}
-
-	bool push_back(T const& elem){
-		if(this->space() == 0){
-			return false;
-		}
-
-		usize idx = (this->offset + this->len) % cap;
-		this->data[idx] = elem;
-		this->len += 1;
-		return true;
-	}
-
-	bool push_front(T const& elem){
-		if(this->space() == 0){
-			return false;
-		}
-
-		this->offset = (this->offset - 1 + this->data) % this->cap;
-		this->len += 1;
-		this->data[this->offset] = elem;
-
-		return true;
-	}
-
-	bool pop_back(){
-		if(this->len == 0){
-			return false;
-		}
-
-		this->len -= 1;
-
-		return true;
-	}
-
-	bool pop_back(T* out){
-		if(this->len == 0){
-			return false;
-		}
-
-		this->len -= 1;
-		usize idx = (this->offset + this->len) % this->cap;
-		*out = this->data[idx];
-
-		return true;
-	}
-
-	bool pop_front(){
-		if(this->len == 0){
-			return false;
-		}
-
-		this->offset = (this->offset + 1) % this->cap;
-		this->len -= 1;
-
-		return true;
-	}
-
-	bool pop_front(T* out){
-		if(this->len == 0){
-			return false;
-		}
-
-		*out = this->data[this->offset];
-		this->offset = (this->offset + 1) % this->cap;
-		this->len -= 1;
-		return true;
-	}
-};
-
 //// SPSC queue
 constexpr usize destructive_interference_size = 64;
 
 template<class T>
 struct SPSC_Queue {
 	T* data;
-	usize capacity;
+	usize capacity; // NOTE: Remember that there's always a "slack" slot, so the effective capacity is actually capacity - 1
 	alignas(destructive_interference_size)
 	Atomic<usize> read_pos;
 	alignas(destructive_interference_size)
@@ -930,33 +849,5 @@ SPSC_Queue<T>* make_spsc_queue(Arena* a, usize capacity){
 	}
 
 	return queue;
-}
-
-
-// This template hack is required to prevent implict conversions
-template<SameAs<usize> UInt>
-constexpr UInt next_pow2(UInt x) {
-	if(x == 0){ return 1; }
-
-	constexpr usize bit_width = sizeof(UInt) * 8;
-	static_assert(bit_width >= 8 && bit_width <= 64, "Invalid bit width");
-	x -= 1;
-
-	// Common for > 8 bit
-	x |= x >> 1;
-	x |= x >> 2;
-	x |= x >> 4;
-
-	if constexpr(bit_width >= 16)
-		x |= x >> 8;
-
-	if constexpr(bit_width >= 32)
-		x |= x >> 16;
-
-	if constexpr(bit_width >= 64)
-		x |= x >> 32;
-
-	x += 1;
-	return x;
 }
 
