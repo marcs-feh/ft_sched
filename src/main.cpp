@@ -30,6 +30,7 @@ void print_slice(Slice<T> slice, char const* elem_fmt){
 // }
 
 // init_spsc_queue()
+struct Unit{};
 
 struct Deadline {
 	TimeTick last_tick{0};
@@ -68,6 +69,7 @@ static
 void print_info(){
 	printf("Address Width:  %zu-bit\n", sizeof(void*) * 8);
 	printf("Tick Frequency: %tu Hz\n", tick_frequency());
+	printf("RawTask size:   %td\n", sizeof(RawTask));
 }
 
 TimeTick start = 0;
@@ -114,8 +116,19 @@ struct SimpleTask {
 	}
 
 	Output result(){
-		_task.join();
+		if(_task._status.load() != TaskStatus_Done){
+			_task.join();
+		}
 		return _result.unwrap();
+	}
+
+	bool has_result() const {
+		return _result.ok() && _task._status.load(memory_order_relaxed) == TaskStatus_Done;
+	}
+
+	attribute_force_inline
+	TaskStatus status() const {
+		return _task._status.load(memory_order_relaxed);
 	}
 
 	explicit SimpleTask(TaskFunc f)
@@ -135,20 +148,17 @@ int main(){
 	srand(tick_now());
 	permanent_arena = arena_from_buffer(Slice<u8>{&permanent_arena_data[0], sizeof(permanent_arena_data)});
 	start = tick_now();
-	usize arena_size = 24 * mem_kilobyte;
+	usize arena_size = 8 * mem_kilobyte;
 	u8* arena_data = new u8[arena_size];
 
 	Arena arena = arena_from_buffer(Slice<u8>{&arena_data[0], arena_size});
 	print_info();
 
-	auto foo = make_simple_task(&arena, []() {
-		printf("Hello\n");
-		return 0;
-	});
-
+	auto foo = make_simple_task(&arena, [](){return 1;});
 	foo->run();
-	int n = ::move(foo->result());
+	int n = foo->result();
 	printf("Foo: %d\n", n);
-	printf("Sizeof foo: %td", sizeof(*foo));
+	int y = foo->result();
+	printf("Sizeof foo: %td (overhead: %td)", sizeof(*foo), sizeof(*foo) - sizeof(RawTask));
 }
 

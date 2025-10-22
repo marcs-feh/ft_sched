@@ -34,9 +34,7 @@ struct RawTask {
 	RawTaskFunc func = nullptr;
 	Arena* arena = nullptr;
 	void* args = nullptr;
-	void* result = nullptr;
 	Atomic<TaskStatus> _status = TaskStatus_Undefined;
-
 	RawTaskPlatformSpecificData _specific{};
 
 	void run() {
