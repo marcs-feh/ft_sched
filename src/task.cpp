@@ -4,8 +4,6 @@
 void init_raw_task(RawTask* task, Arena* a, RawTaskFunc func, void* args){
 	ensure(task != nullptr, "Must be non-null");
 
-	auto restore = a->offset;
-
 	task->func = func;
 	task->arena = a;
 	task->_status.store(TaskStatus_Initialized);
@@ -13,7 +11,6 @@ void init_raw_task(RawTask* task, Arena* a, RawTaskFunc func, void* args){
 }
 
 RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args){
-	auto restore = a->offset;
 	auto task = make<RawTask>(a);
 
 	if(task){

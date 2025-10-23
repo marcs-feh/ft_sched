@@ -70,8 +70,6 @@ usize tick_frequency(){
 }
 
 void sleep_for(Duration d){
-	constexpr f64 milliseconds_per_duration = 1000.0 / static_cast<f64>(Duration::scale);
-
 	DWORD ms = max(0, (d._value / Duration::millisecond));
 	Sleep(ms);
 }

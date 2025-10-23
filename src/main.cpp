@@ -32,12 +32,6 @@ void print_slice(Slice<T> slice, char const* elem_fmt){
 // init_spsc_queue()
 struct Unit{};
 
-struct Deadline {
-	TimeTick last_tick{0};
-	TimeTick deadline{0};
-	RawTask* task;
-};
-
 Arena permanent_arena;
 u8 permanent_arena_data[4 * mem_kilobyte];
 
@@ -144,6 +138,70 @@ auto make_simple_task(Arena* a, F&& func){
 	return t;
 }
 
+struct DeadlineHandle {
+	u32 idx : 20;
+	u32 gen : 12;
+
+	static constexpr u32 max_idx = (1 << 20) - 1;
+	static constexpr u32 max_gen = (1 << 12) - 1;
+
+	constexpr bool empty() const {
+		return gen == 0;
+	}
+};
+
+static_assert(sizeof(DeadlineHandle) == 4, "Unexpected handle size");
+
+struct Deadline {
+	TimeTick last_tick{0};
+	Duration limit{0};
+	RawTask* task{nullptr};
+
+	// When the node is free, this is the Next link, otherwhise, it is the handle info
+	DeadlineHandle _slot{};
+};
+
+struct DeadlineWatcher {
+	Slice<Deadline> deadlines;
+	DeadlineHandle first;
+
+	void clear(){
+		for(u32 i = 0; i < deadlines.len; i += 1){
+			auto s = deadlines[i]._slot;
+
+			deadlines[i]._slot.idx = min<u32>(i + 1, DeadlineHandle::max_idx);
+			deadlines[i]._slot.gen += min<u32>(s.gen + 1, DeadlineHandle::max_idx);
+		}
+		deadlines[deadlines.len-1]._slot = {0, 0};
+	}
+
+	bool add(RawTask* t, Duration limit){
+		if(first.empty()){
+			return false;
+		}
+
+		Deadline* d = &deadlines[first.idx];
+		first = d->_slot;
+
+		d->last_tick = tick_now();
+		d->task = t;
+		d->limit = limit;
+
+		return DeadlineHandle{};
+	}
+
+	bool reset(DeadlineHandle h){
+		if(h.idx < deadlines.len){
+			return false;
+		}
+		auto d = &deadlines[h.idx];
+		ensure(h.gen == d._slot.gen, "Dangling node");
+		return d;
+	}
+
+	// void check(){}
+};
+
 int main(){
 	srand(tick_now());
 	permanent_arena = arena_from_buffer(Slice<u8>{&permanent_arena_data[0], sizeof(permanent_arena_data)});
@@ -158,7 +216,7 @@ int main(){
 	foo->run();
 	int n = foo->result();
 	printf("Foo: %d\n", n);
-	int y = foo->result();
-	printf("Sizeof foo: %td (overhead: %td)", sizeof(*foo), sizeof(*foo) - sizeof(RawTask));
+	printf("Sizeof handle: %td\n", sizeof(DeadlineHandle));
+	printf("Sizeof foo: %td (overhead: %td)\n", sizeof(*foo), sizeof(*foo) - sizeof(RawTask));
 }
 

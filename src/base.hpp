@@ -293,6 +293,42 @@ struct Option {
 	}
 };
 
+//// C++ Iterator insanity
+namespace detail {
+template<typename T>
+struct ContigousMemoryCppIterator {
+	using reference = T&;
+	using pointer = T*;
+
+	T* _ptr = nullptr;
+
+    constexpr 
+    reference operator*() const { return *_ptr; }
+
+    constexpr 
+    pointer operator->() { return _ptr; }
+
+    constexpr 
+    ContigousMemoryCppIterator<T>& operator++(){
+    	_ptr++;
+    	return *this;
+    }
+
+    constexpr 
+    ContigousMemoryCppIterator<T>& operator++(int) {
+    	ContigousMemoryCppIterator<T> prev = *this;
+    	++(*this);
+    	return prev;
+    }
+
+    constexpr bool operator==(ContigousMemoryCppIterator<T> const& it){ return it._ptr == _ptr; }
+    constexpr bool operator!=(ContigousMemoryCppIterator<T> const& it){ return it._ptr != _ptr; }
+
+    explicit constexpr ContigousMemoryCppIterator(T* p)
+    	: _ptr{p}{}
+};
+}
+
 //// Slice
 template<class T>
 struct Slice {
@@ -326,6 +362,14 @@ struct Slice {
 	T const& operator[](usize idx) const {
 		ensure(idx < len, "Out of bounds access");
 		return data[idx];
+	}
+
+	// C++ iterator stuff
+	auto begin(){
+		return detail::ContigousMemoryCppIterator<T>{ data };
+	}
+	auto end(){
+		return detail::ContigousMemoryCppIterator<T>{ &data[len] };
 	}
 
 };

@@ -149,6 +149,12 @@ function titlecase(k)
 	return k:sub(1, 1):upper() .. k:sub(2)
 end
 
+local valid_platforms = {linux = true, windows = true}
+
+if not valid_platforms[platform] then
+	error('Invalid platform', 1)
+end
+
 generate_ninja()
 generate_crc32()
 
