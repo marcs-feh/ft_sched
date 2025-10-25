@@ -4,6 +4,8 @@
 *.ilk
 *.exp
 *.a
+*.sublime-workspace
+*.su
+*.map
 *.lib
 .ninja_*
-*.sublime-workspace

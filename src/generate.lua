@@ -7,6 +7,7 @@ function generate_ninja()
 	local cflags = {'-std=c++20', '-fwrapv', '-fno-strict-aliasing', '-fno-rtti', '-fno-exceptions'}
 	local wflags = {'-Wall', '-Wextra', '-Werror=return-type'}
 	local ldflags = {'-fuse-ld=lld'}
+	local ar = 'ar'
 
 	local sb = Builder:new()
 	local sources = {
@@ -24,18 +25,38 @@ function generate_ninja()
 		cflags[#cflags+1] = '-D_CRT_SECURE_NO_WARNINGS'
 		sources[#sources+1] = 'platform_windows.cpp'
 		ldflags[#ldflags+1] = '-fuse-ld=lld'
+	elseif platform == 'stm32blackpill' then
+		cc = 'arm-none-eabi-g++'
+		ar = 'arm-none-eabi-ar'
+
+		local stm32flags = {
+			-- Machine specfics
+			'-mcpu=cortex-m4',
+			'-mfpu=fpv4-sp-d16',
+			'-mfloat-abi=hard',
+			'-mthumb',
+
+			-- This is to ensure better code elimination in the linker later.
+			-- This is usually the default but it's better to be sure
+			'-ffunction-sections',
+			'-fdata-sections',
+			'-fstack-usage',
+
+			'-nostdlib',
+		}
+		cflags = join_list(cflags, stm32flags)
 	end
 
 	if build_mode == 'debug' then
-		ldflags[#ldflags+1] = '-g'
-
-		cflags[#cflags+1] = '-g'
+		ldflags[#ldflags+1] = '-g3'
+		cflags[#cflags+1] = '-g3'
 		cflags[#cflags+1] = '-O0'
 	elseif build_mode == 'release' then
 		cflags[#cflags+1] = '-Os'
 	end
 
 	sb:line('cc = %s', cc)
+	sb:line('ar = %s', ar)
 	sb:line('cflags = %s', join_space(cflags))
 	sb:line('wflags = %s', join_space(wflags))
 	sb:line('ldflags = %s', join_space(ldflags))
@@ -53,7 +74,12 @@ function generate_ninja()
 		sb:line('build %s: compile %s', obj, file)
 		objects[#objects+1] = obj
 	end
-	sb:line('build ft_sched.exe: link %s', join_space(objects))
+
+	if platform ~= 'stm32blackpill' then
+		sb:line('build ft_sched.exe: link %s', join_space(objects))
+	else
+		sb:line('build ft_sched.a: archive %s', join_space(objects))
+	end
 
 	-- Ninja is picky about ending with a newline
 	sb:line():line()
@@ -149,7 +175,18 @@ function titlecase(k)
 	return k:sub(1, 1):upper() .. k:sub(2)
 end
 
-local valid_platforms = {linux = true, windows = true}
+function join_list(a, b)
+	res = {}
+	for _, v in ipairs(a) do
+		res[#res+1] = v
+	end
+	for _, v in ipairs(b) do
+		res[#res+1] = v
+	end
+	return res
+end
+
+local valid_platforms = {linux = true, windows = true, stm32blackpill = true}
 
 if not valid_platforms[platform] then
 	error('Invalid platform', 1)

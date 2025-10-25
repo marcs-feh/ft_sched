@@ -4,6 +4,24 @@
 #include <windows.h>
 #include <stdio.h>
 
+//// Base platform specifics
+extern "C" {
+	void abort();
+	#include <stdio.h>
+}
+
+static inline
+void error_write(cstring msg){
+	fputs(msg, stderr);
+}
+
+[[noreturn]] static inline
+void trap(){
+	abort();
+	for(;;);
+}
+
+//// FT_Sched platform specifics
 struct RawTaskPlatformSpecific {
 	HANDLE handle;
 	DWORD id;

@@ -12,23 +12,6 @@ usize cstring_len(cstring cs) {
 	return n;
 }
 
-//// External dependencies
-extern "C"{
-	void abort();
-	#include <stdio.h>
-}
-
-static inline
-void error_write(char const* msg){
-	fputs(msg, stderr);
-}
-
-[[noreturn]] static inline
-void trap(){
-	abort();
-	for(;;);
-}
-
 //// Assertions
 static
 int error_vprintf(char const* filename, int line, char const* fmt, va_list args){

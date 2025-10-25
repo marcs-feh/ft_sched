@@ -3,6 +3,28 @@
 #include <semaphore.h>
 #include <time.h>
 
+//// Base platform specifics
+#include "base.hpp"
+
+extern "C" {
+	#include <sys/types.h>
+	void abort();
+	ssize_t write(int fd, void const* buf, size_t count);
+}
+
+constexpr int stderr_fileno = 2;
+
+void error_write(cstring msg){
+	write(stderr_fileno, msg, cstring_len(msg));
+}
+
+[[noreturn]]
+void trap(){
+	abort();
+	for(;;);
+}
+
+//// FT_Sched platform specifics
 #include "ft_sched.hpp"
 #include "task.hpp"
 

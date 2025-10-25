@@ -80,14 +80,14 @@ using AtomicIsize = Atomic<isize>;
 
 using AtomicBool = Atomic<bool>;
 
-static_assert(AtomicI8::is_always_lock_free, "Expected i8 to be lock-free");
-static_assert(AtomicI16::is_always_lock_free, "Expected i16 to be lock-free");
-static_assert(AtomicI32::is_always_lock_free, "Expected i32 to be lock-free");
-static_assert(AtomicI64::is_always_lock_free, "Expected i64 to be lock-free");
-static_assert(AtomicU8::is_always_lock_free, "Expected u8 to be lock-free");
-static_assert(AtomicU16::is_always_lock_free, "Expected u16 to be lock-free");
-static_assert(AtomicU32::is_always_lock_free, "Expected u32 to be lock-free");
-static_assert(AtomicU64::is_always_lock_free, "Expected u64 to be lock-free");
+// static_assert(AtomicI8::is_always_lock_free, "Expected i8 to be lock-free");
+// static_assert(AtomicI16::is_always_lock_free, "Expected i16 to be lock-free");
+// static_assert(AtomicI32::is_always_lock_free, "Expected i32 to be lock-free");
+// static_assert(AtomicI64::is_always_lock_free, "Expected i64 to be lock-free");
+// static_assert(AtomicU8::is_always_lock_free, "Expected u8 to be lock-free");
+// static_assert(AtomicU16::is_always_lock_free, "Expected u16 to be lock-free");
+// static_assert(AtomicU32::is_always_lock_free, "Expected u32 to be lock-free");
+// static_assert(AtomicU64::is_always_lock_free, "Expected u64 to be lock-free");
 static_assert(AtomicUsize::is_always_lock_free, "Expected usize to be lock-free");
 static_assert(AtomicIsize::is_always_lock_free, "Expected isize to be lock-free");
 static_assert(AtomicBool::is_always_lock_free, "Expected bool to be lock-free");
@@ -204,6 +204,11 @@ auto make_deferred(F&& f){
 #define defer(STMT) auto DEFER_COUNTER(_defer_expr_) = ::defer_detail::make_deferred([&](){ STMT; })
 
 //// Assertions
+
+void error_write(cstring msg);
+
+[[noreturn]] void trap();
+
 [[noreturn]] void panic_ex(char const* msg, char const* filename, int line);
 
 bool ensure_ex(bool pred, char const* msg, char const* filename, int line);

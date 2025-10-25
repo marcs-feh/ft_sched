@@ -156,51 +156,48 @@ struct Deadline {
 	TimeTick last_tick{0};
 	Duration limit{0};
 	RawTask* task{nullptr};
-
-	// When the node is free, this is the Next link, otherwhise, it is the handle info
-	DeadlineHandle _slot{};
 };
 
-struct DeadlineWatcher {
-	Slice<Deadline> deadlines;
-	DeadlineHandle first;
-
-	void clear(){
-		for(u32 i = 0; i < deadlines.len; i += 1){
-			auto s = deadlines[i]._slot;
-
-			deadlines[i]._slot.idx = min<u32>(i + 1, DeadlineHandle::max_idx);
-			deadlines[i]._slot.gen += min<u32>(s.gen + 1, DeadlineHandle::max_idx);
-		}
-		deadlines[deadlines.len-1]._slot = {0, 0};
-	}
-
-	bool add(RawTask* t, Duration limit){
-		if(first.empty()){
-			return false;
-		}
-
-		Deadline* d = &deadlines[first.idx];
-		first = d->_slot;
-
-		d->last_tick = tick_now();
-		d->task = t;
-		d->limit = limit;
-
-		return DeadlineHandle{};
-	}
-
-	bool reset(DeadlineHandle h){
-		if(h.idx < deadlines.len){
-			return false;
-		}
-		auto d = &deadlines[h.idx];
-		ensure(h.gen == d._slot.gen, "Dangling node");
-		return d;
-	}
-
-	// void check(){}
-};
+// struct DeadlineWatcher {
+// 	Slice<Deadline> deadlines;
+// 	DeadlineHandle first;
+//
+// 	void clear(){
+// 		for(u32 i = 0; i < deadlines.len; i += 1){
+// 			auto s = deadlines[i]._slot;
+//
+// 			deadlines[i]._slot.idx = min<u32>(i + 1, DeadlineHandle::max_idx);
+// 			deadlines[i]._slot.gen += min<u32>(s.gen + 1, DeadlineHandle::max_idx);
+// 		}
+// 		deadlines[deadlines.len-1]._slot = {0, 0};
+// 	}
+//
+// 	bool add(RawTask* t, Duration limit){
+// 		if(first.empty()){
+// 			return false;
+// 		}
+//
+// 		Deadline* d = &deadlines[first.idx];
+// 		first = d->_slot;
+//
+// 		d->last_tick = tick_now();
+// 		d->task = t;
+// 		d->limit = limit;
+//
+// 		return DeadlineHandle{};
+// 	}
+//
+// 	bool reset(DeadlineHandle h){
+// 		if(h.idx < deadlines.len){
+// 			return false;
+// 		}
+// 		auto d = &deadlines[h.idx];
+// 		ensure(h.gen == d._slot.gen, "Dangling node");
+// 		return d;
+// 	}
+//
+// 	// void check(){}
+// };
 
 int main(){
 	srand(tick_now());
