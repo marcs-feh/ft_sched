@@ -23,6 +23,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdio.h>
+#include "usbd_cdc_if.h"
 
 /* USER CODE END Includes */
 
@@ -64,7 +66,15 @@ void StartDefaultTask(void *argument);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+int _write(int file, char** ptr, int len){
+	uint8_t status = 0;
+	while((status = CDC_Transmit_FS((uint8_t*)ptr, len)) != HAL_OK){
+		if(status == HAL_ERROR){
+			return 0;
+		}
+	}
+	return len;
+}
 /* USER CODE END 0 */
 
 /**
@@ -138,8 +148,7 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
+  while (1){
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -230,9 +239,12 @@ void StartDefaultTask(void *argument)
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 5 */
   /* Infinite loop */
+  int n = 0;
   for(;;)
   {
-    osDelay(1);
+	  printf("n=%d\r\n", n);
+	  n ++;
+	  osDelay(100);
   }
   /* USER CODE END 5 */
 }
