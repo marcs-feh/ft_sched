@@ -1,3 +1,4 @@
+#if 0
 #include <stdio.h>
 #include <math.h>
 
@@ -216,4 +217,44 @@ int main(){
 	printf("Sizeof handle: %td\n", sizeof(DeadlineHandle));
 	printf("Sizeof foo: %td (overhead: %td)\n", sizeof(*foo), sizeof(*foo) - sizeof(RawTask));
 }
+#endif
 
+#include "base.hpp"
+extern "C" {
+	int printf(char const*, ...);
+}
+
+template<class T>
+void print_slice(Slice<T> slice, char const* elem_fmt){
+	printf("len: %td [ ", slice.len);
+	for(usize i = 0; i < slice.len; i ++){
+		printf(elem_fmt, slice[i]);
+		printf(" ");
+	} printf("]\r\n");
+}
+
+Arena main_arena;
+constexpr usize main_arena_size = 4096;
+u8 main_arena_memory[main_arena_size];
+
+void entrypoint(){
+	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
+	auto s = make_slice<i32>(&main_arena, 69);
+	for(usize i = 0; i < s.len; i+=1){
+		s[i] = i;
+	}
+
+	print_slice(s, "%d");
+}
+
+extern "C" {
+void ft_sched_entrypoint(){
+	entrypoint();
+}
+}
+
+#if 0
+int main() {
+	ft_sched_entrypoint();
+}
+#endif

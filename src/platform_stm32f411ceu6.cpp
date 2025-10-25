@@ -1,24 +1,60 @@
 #include "FreeRTOS.h"
+#include "task.h"
 
 //// Base platform specifics
 #include "base.hpp"
 
-struct RawTaskPlatformSpecific {
-	BaseType_t _handle;
-};
+extern "C" {
+	void abort();
+	#include <stdio.h>
+}
 
-static
-void _freertos_task_wrapper(void* arg){
+void error_write(cstring msg){
+	fputs(msg, stderr);
+}
+
+[[noreturn]]
+void trap(){
+	abort();
+
+	for(;;);
 }
 
 
- // BaseType_t xTaskCreate( TaskFunction_t pvTaskCode,
- //                         const char * const pcName,
- //                         const configSTACK_DEPTH_TYPE uxStackDepth,
- //                         void *pvParameters,
- //                         UBaseType_t uxPriority,
- //                         TaskHandle_t *pxCreatedTask
- //                       );
-
-
 //// FT_Sched platform specifics
+#include "task.hpp"
+
+struct RawTaskPlatformSpecific {
+	TaskHandle_t handle;
+};
+
+constexpr usize rtos_stack_size_words = 200;
+
+static
+void _freertos_task_wrapper(void* task_ptr){
+	RawTask* task = (RawTask*)task_ptr;
+	task->_status.store(TaskStatus_Started);
+	task->func(task);
+	task->_status.store(TaskStatus_Done);
+}
+
+void RawTask::_init_specifics_and_run(){
+	ensure(_status.load() == TaskStatus_Initialized, "Invalid task status");
+
+	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
+
+	BaseType_t ok = xTaskCreate(
+		_freertos_task_wrapper,
+		"Task",
+		rtos_stack_size_words,
+		(void*)this,
+		tskIDLE_PRIORITY,
+		&specific->handle
+	) == pdPASS;
+
+	// ensure(ok, "Failed to create thread");
+}
+
+
+static_assert(sizeof(RawTaskPlatformSpecific) <= sizeof(RawTaskPlatformSpecificData), "Platform specific struct has insufficient size");
+static_assert(alignof(RawTaskPlatformSpecific) <= alignof(RawTaskPlatformSpecificData), "Platform specific struct has insufficient size");

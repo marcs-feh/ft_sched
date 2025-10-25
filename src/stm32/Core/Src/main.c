@@ -233,7 +233,8 @@ static void MX_GPIO_Init(void)
   * @retval None
   */
 /* USER CODE END Header_StartDefaultTask */
-	extern void cxx_test();
+	extern void ft_sched_entrypoint();
+
 void StartDefaultTask(void *argument)
 {
   /* init code for USB_DEVICE */
@@ -245,7 +246,7 @@ void StartDefaultTask(void *argument)
   {
 
 	  // printf("(skibidi) n = %d\r\n", n);
-		cxx_test();
+		ft_sched_entrypoint();
 
 	  n ++;
 	  osDelay(100);

@@ -10,12 +10,11 @@ extern "C" {
 	#include <stdio.h>
 }
 
-static inline
 void error_write(cstring msg){
 	fputs(msg, stderr);
 }
 
-[[noreturn]] static inline
+[[noreturn]]
 void trap(){
 	abort();
 	for(;;);

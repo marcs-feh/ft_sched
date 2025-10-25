@@ -2,11 +2,11 @@ local platform = arg[1] or error('Required platform')
 local build_mode = arg[2] or 'debug'
 local now = os.date('%Y-%m-%d %H:%M:%S', os.time())
 
-function generate_ninja()
+function generate_makefile()
 	local cc = 'clang++'
 	local cflags = {'-std=c++20', '-fwrapv', '-fno-strict-aliasing', '-fno-rtti', '-fno-exceptions', '-I.'}
 	local wflags = {'-Wall', '-Wextra', '-Werror=return-type'}
-	local ldflags = {'-fuse-ld=lld'}
+	local ldflags = {}
 	local ar = 'ar'
 
 	local sb = Builder:new()
@@ -20,11 +20,9 @@ function generate_ninja()
 	if platform == 'linux' then
 		cflags[#cflags+1] = '-fPIC'
 		sources[#sources+1] = 'platform_linux.cpp'
-		ldflags[#ldflags+1] = '-fuse-ld=mold'
 	elseif platform == 'windows' then
 		cflags[#cflags+1] = '-D_CRT_SECURE_NO_WARNINGS'
 		sources[#sources+1] = 'platform_windows.cpp'
-		ldflags[#ldflags+1] = '-fuse-ld=lld'
 	elseif platform == 'stm32blackpill' then
 		cc = 'arm-none-eabi-g++'
 		ar = 'arm-none-eabi-ar'
@@ -55,44 +53,56 @@ function generate_ninja()
 	end
 
 	if build_mode == 'debug' then
-		ldflags[#ldflags+1] = '-g3'
 		cflags[#cflags+1] = '-g3'
 		cflags[#cflags+1] = '-O0'
 	elseif build_mode == 'release' then
 		cflags[#cflags+1] = '-Os'
 	end
 
-	sb:line('cc = %s', cc)
-	sb:line('ar = %s', ar)
-	sb:line('cflags = %s', join_space(cflags))
-	sb:line('wflags = %s', join_space(wflags))
-	sb:line('ldflags = %s', join_space(ldflags))
-	sb:line('rule compile')
-	sb:line('  command = $cc $cflags $wflags -c $in -o $out -MD -MF $out.d')
-	sb:line('  deps = gcc')
-	sb:line('  depfile = $out.d')
-	sb:line('rule archive')
-	sb:line('  command = $ar rcs $out $in')
-	sb:line('rule link')
-	sb:line('  command = $cc -o $out $in $ldflags')
+	local output = 'ft_sched.exe'
+	if platform == 'stm32blackpill' then
+		output = 'libft_sched.a'
+	end
+
+
+	sb:line('# Auto generated at %s', now)
+	sb:line('CC = %s', cc)
+	sb:line('AR = %s', ar)
+	sb:line('CFLAGS = %s', join_space(cflags))
+	sb:line('WFLAGS = %s', join_space(wflags))
+	sb:line('LDFLAGS = %s', join_space(ldflags))
+	sb:line('.PHONY: clean all')
+
+	sb:line('all: %s', output)
+
+	local deps = {}
 
 	for _, file in ipairs(sources) do
 		local obj = file .. '.o'
-		sb:line('build %s: compile %s', obj, file)
+		local dep = file .. '.d'
+		sb:line('-include %s', dep)
+		sb:line('%s: %s', obj, file)
+		sb:line('\t$(CC) $(CFLAGS) $(WFLAGS) -c %s -MD -MF %s -o %s', file, dep, obj)
+
 		objects[#objects+1] = obj
+		deps[#deps+1] = dep
 	end
 
-	if platform ~= 'stm32blackpill' then
-		sb:line('build ft_sched.exe: link %s', join_space(objects))
+	sb:line('%s: %s', output, join_space(objects))
+	if platform == 'stm32blackpill' then
+		sb:line('\t$(AR) rcs %s %s', output, join_space(objects))
+		sb:line('\tcp %s stm32/%s', output, output)
 	else
-		sb:line('build ft_sched.a: archive %s', join_space(objects))
+		sb:line('\t$(CC) -o %s $(LDFLAGS) %s', output, join_space(objects))
 	end
 
-	-- Ninja is picky about ending with a newline
+	sb:line('clean:\n\trm -f %s %s %s', join_space(objects), join_space(deps), output)
+
+
 	sb:line():line()
-	local f = io.open('build.ninja', 'wb')
+	local f = io.open('Makefile', 'wb')
 	f:write(sb:to_string())
-	print(('Generated build.ninja (%s/%s)'):format(titlecase(build_mode), titlecase(platform)))
+	print(('Generated Makefile (%s/%s)'):format(titlecase(build_mode), titlecase(platform)))
 end
 
 function generate_crc32()
@@ -199,6 +209,6 @@ if not valid_platforms[platform] then
 	error('Invalid platform', 1)
 end
 
-generate_ninja()
+generate_makefile()
 generate_crc32()
 
