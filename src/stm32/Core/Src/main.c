@@ -242,7 +242,7 @@ void StartDefaultTask(void *argument)
   int n = 0;
   for(;;)
   {
-	  printf("n=%d\r\n", n);
+	  printf("(skibidi) n = %d\r\n", n);
 	  n ++;
 	  osDelay(100);
   }
