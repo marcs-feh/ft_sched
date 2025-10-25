@@ -71,9 +71,10 @@ function generate_makefile()
 	sb:line('CFLAGS = %s', join_space(cflags))
 	sb:line('WFLAGS = %s', join_space(wflags))
 	sb:line('LDFLAGS = %s', join_space(ldflags))
-	sb:line('.PHONY: clean all')
+	sb:line()
+	sb:line('.PHONY: clean all'):line()
 
-	sb:line('all: %s', output)
+	sb:line('all: %s Makefile', output):line()
 
 	local deps = {}
 
@@ -82,7 +83,7 @@ function generate_makefile()
 		local dep = file .. '.d'
 		sb:line('-include %s', dep)
 		sb:line('%s: %s', obj, file)
-		sb:line('\t$(CC) $(CFLAGS) $(WFLAGS) -c %s -MD -MF %s -o %s', file, dep, obj)
+		sb:line('\t$(CC) $(CFLAGS) $(WFLAGS) -c %s -MD -MF %s -o %s', file, dep, obj):line()
 
 		objects[#objects+1] = obj
 		deps[#deps+1] = dep
