@@ -4,7 +4,7 @@ local now = os.date('%Y-%m-%d %H:%M:%S', os.time())
 
 function generate_ninja()
 	local cc = 'clang++'
-	local cflags = {'-std=c++20', '-fwrapv', '-fno-strict-aliasing', '-fno-rtti', '-fno-exceptions'}
+	local cflags = {'-std=c++20', '-fwrapv', '-fno-strict-aliasing', '-fno-rtti', '-fno-exceptions', '-I.'}
 	local wflags = {'-Wall', '-Wextra', '-Werror=return-type'}
 	local ldflags = {'-fuse-ld=lld'}
 	local ar = 'ar'
@@ -43,8 +43,15 @@ function generate_ninja()
 			'-fstack-usage',
 
 			'-nostdlib',
+
+			'-I./stm32/Core/Inc',
+			'-I./stm32/Middlewares/Third_Party/FreeRTOS/Source/include',
+			'-I./stm32/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2',
+			'-I./stm32/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F',
 		}
+
 		cflags = join_list(cflags, stm32flags)
+		sources[#sources+1] = 'platform_stm32f411ceu6.cpp'
 	end
 
 	if build_mode == 'debug' then

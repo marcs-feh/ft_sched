@@ -1,6 +1,6 @@
 cc = arm-none-eabi-g++
 ar = arm-none-eabi-ar
-cflags = -std=c++20 -fwrapv -fno-strict-aliasing -fno-rtti -fno-exceptions -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -ffunction-sections -fdata-sections -fstack-usage -nostdlib -g3 -O0
+cflags = -std=c++20 -fwrapv -fno-strict-aliasing -fno-rtti -fno-exceptions -I. -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -ffunction-sections -fdata-sections -fstack-usage -nostdlib -I./stm32/Core/Inc -I./stm32/Middlewares/Third_Party/FreeRTOS/Source/include -I./stm32/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2 -I./stm32/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F -g3 -O0
 wflags = -Wall -Wextra -Werror=return-type
 ldflags = -fuse-ld=lld -g3
 rule compile
@@ -14,5 +14,6 @@ rule link
 build main.cpp.o: compile main.cpp
 build base.cpp.o: compile base.cpp
 build ft_sched.cpp.o: compile ft_sched.cpp
-build ft_sched.a: archive main.cpp.o base.cpp.o ft_sched.cpp.o
+build platform_stm32f411ceu6.cpp.o: compile platform_stm32f411ceu6.cpp
+build ft_sched.a: archive main.cpp.o base.cpp.o ft_sched.cpp.o platform_stm32f411ceu6.cpp.o
 
