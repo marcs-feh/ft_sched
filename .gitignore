@@ -10,3 +10,4 @@
 *.map
 *.lib
 .ninja_*
+build

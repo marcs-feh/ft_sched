@@ -1,8 +1,8 @@
-cc = clang++
-ar = ar
-cflags = -std=c++20 -fwrapv -fno-strict-aliasing -fno-rtti -fno-exceptions -fPIC -g3 -O0
+cc = arm-none-eabi-g++
+ar = arm-none-eabi-ar
+cflags = -std=c++20 -fwrapv -fno-strict-aliasing -fno-rtti -fno-exceptions -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -ffunction-sections -fdata-sections -fstack-usage -nostdlib -g3 -O0
 wflags = -Wall -Wextra -Werror=return-type
-ldflags = -fuse-ld=lld -fuse-ld=mold -g3
+ldflags = -fuse-ld=lld -g3
 rule compile
   command = $cc $cflags $wflags -c $in -o $out -MD -MF $out.d
   deps = gcc
@@ -14,6 +14,5 @@ rule link
 build main.cpp.o: compile main.cpp
 build base.cpp.o: compile base.cpp
 build ft_sched.cpp.o: compile ft_sched.cpp
-build platform_linux.cpp.o: compile platform_linux.cpp
-build ft_sched.exe: link main.cpp.o base.cpp.o ft_sched.cpp.o platform_linux.cpp.o
+build ft_sched.a: archive main.cpp.o base.cpp.o ft_sched.cpp.o
 
