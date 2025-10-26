@@ -66,14 +66,20 @@ void StartDefaultTask(void *argument);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-int _write(int file, char** ptr, int len){
-	uint8_t status = 0;
-	while((status = CDC_Transmit_FS((uint8_t*)ptr, len)) != HAL_OK){
-		if(status == HAL_ERROR){
-			return 0;
-		}
-	}
-	return len;
+
+int _write(int file, char *ptr, int len) {
+    uint8_t result = 0;
+
+    do {
+        result = CDC_Transmit_FS((uint8_t*)ptr, len);
+        if (result == USBD_BUSY) {
+            osThreadYield(); 
+        } else if (result == USBD_FAIL) {
+            return 0;
+        }
+    } while (result == USBD_BUSY);
+
+    return len;
 }
 /* USER CODE END 0 */
 
@@ -184,21 +190,21 @@ void SystemClock_Config(void)
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
-  }
+}
 
   /** Initializes the CPU, AHB and APB buses clocks
   */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+|RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
+RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_3) != HAL_OK)
-  {
+if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_3) != HAL_OK)
+{
     Error_Handler();
-  }
+}
 }
 
 /**
@@ -233,7 +239,7 @@ static void MX_GPIO_Init(void)
   * @retval None
   */
 /* USER CODE END Header_StartDefaultTask */
-	extern void ft_sched_entrypoint();
+extern void ft_sched_entrypoint();
 
 void StartDefaultTask(void *argument)
 {
@@ -241,16 +247,9 @@ void StartDefaultTask(void *argument)
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 5 */
   /* Infinite loop */
-  int n = 0;
-  for(;;)
-  {
-
 	  // printf("(skibidi) n = %d\r\n", n);
-		ft_sched_entrypoint();
+  ft_sched_entrypoint();
 
-	  n ++;
-	  osDelay(100);
-  }
   /* USER CODE END 5 */
 }
 
@@ -270,7 +269,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   if (htim->Instance == TIM1)
   {
     HAL_IncTick();
-  }
+}
   /* USER CODE BEGIN Callback 1 */
 
   /* USER CODE END Callback 1 */

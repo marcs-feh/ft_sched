@@ -10,6 +10,13 @@
 	#define attribute_force_inline
 #endif
 
+#if defined(__clang__) || defined(__GNUC__)
+	#define attribute_format(fmt_pos, args_pos) __attribute__((format (printf, fmt_pos, args_pos)))
+#else
+	#warning "Could not find printf format attribute. This will degrade warning quality"
+	#define attribute_format(fmt, args)
+#endif
+
 #include <stddef.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -794,8 +801,12 @@ cstring clone_to_cstring(String s, Arena* a);
 
 String buffer_vprintf(Slice<u8> buf, char const* fmt, va_list args);
 
+attribute_format(2, 3)
+String buffer_printf(Slice<u8> buf, char const* fmt, ...);
+
 String arena_vprintf(Arena* arena, char const* fmt, va_list args);
 
+attribute_format(2, 3)
 String arena_printf(Arena* arena, char const* fmt, ...);
 
 //// Spinlock

@@ -4,20 +4,21 @@
 using TimeTick = isize;
 
 struct Duration {
-	static constexpr isize scale = 10'000'000; // 10MHz
+	static constexpr isize scale = 1'000'000; // 10MHz
 
 	static constexpr isize second = scale / 1;
 	static constexpr isize millisecond = scale / 1'000;
 	static constexpr isize microsecond = scale / 1'000'000;
 
-	isize _value{0};
+	i64 _value{0};
 
 	static Duration from_second(isize n){
 		return {(n * scale) / 1};
 	}
 
 	static Duration from_milli(isize n){
-		return {(n * scale) / 1'000};
+		isize val = {(n * scale) / 1'000};
+		return Duration{val};
 	}
 
 	static Duration from_micro(isize n){

@@ -378,12 +378,19 @@ RuneEncoded rune_encode(rune r){
 }
 
 String buffer_vprintf(Slice<u8> buf, char const* fmt, va_list args){
-	int n = stbsp_vsnprintf((char*)buf.data, (int)buf.len - 1, fmt, args);
+	int n = stbsp_vsnprintf((char*)buf.data, (int)buf.len, fmt, args);
 	if(n > 0){
-		buf[n] = 0;
 		return String((char const*)buf.data, n);
 	}
 	return {};
+}
+
+String buffer_printf(Slice<u8> buf, char const* fmt, ...) {
+	va_list args;
+	va_start(args, fmt);
+	String res = buffer_vprintf(buf, fmt, args);
+	va_end(args);
+	return res;
 }
 
 String arena_vprintf(Arena* arena, char const* fmt, va_list args){

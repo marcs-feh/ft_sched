@@ -166,3 +166,52 @@ bool init_tmr_task(RawTask* task, Arena* a, u32 subtask_arena_size, RawTaskFunc 
 
 TMR_Task* make_tmr_task(Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args, usize args_size, usize args_align = default_argument_alignment);
 
+template<typename F, typename Output>
+concept Returns = requires(F f){
+	{ f() } -> SameAs<Output>;
+};
+
+template<typename Output, Returns<Output> TaskFunc>
+struct BasicTask {
+	RawTask _task;
+	TaskFunc _func;
+	Option<Output> _result;
+
+	static void _simple_task_wrapper(RawTask* t){
+		auto self = (BasicTask<Output, TaskFunc>*)t->args;
+		self->_result = Output{ self->_func() };
+	}
+
+	void run(){
+		ensure(_task._status.load(memory_order_relaxed) == TaskStatus_Initialized, "Inner task has not been initialized");
+		_task.run();
+	}
+
+	Output result(){
+		if(_task._status.load() != TaskStatus_Done){
+			_task.join();
+		}
+		return _result.unwrap();
+	}
+
+	bool has_result() const {
+		return _result.ok() && _task._status.load(memory_order_relaxed) == TaskStatus_Done;
+	}
+
+	attribute_force_inline
+	TaskStatus status() const {
+		return _task._status.load(memory_order_relaxed);
+	}
+
+	explicit BasicTask(TaskFunc f)
+		: _task{}
+		, _func{f} {}
+};
+
+template<typename F>
+auto make_basic_task(Arena* a, F&& func){
+	auto t = make<BasicTask<decltype(func()), F>>(a, forward<F>(func));
+
+	init_raw_task(&t->_task, a, t->_simple_task_wrapper, t);
+	return t;
+}

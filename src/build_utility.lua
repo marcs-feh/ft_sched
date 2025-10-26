@@ -52,12 +52,14 @@ function Task:wait()
 	local status = self.handle:close()
 	self.running = false
 
+	local f = io.open(self.error_log_path, 'rb')
+	if f then
+		outerr = f:read('*a')
+		f:close()
+	end
+
 	if not status then
-		local f = io.open(self.error_log_path, 'rb')
-		if f then
-			output = output .. '\n' .. f:read('*a')
-			f:close()
-		end
+		outerr = output .. '\n' .. outerr
 		ok = false
 	end
 
@@ -66,7 +68,7 @@ function Task:wait()
 		error(output, 2)
 	end
 
-	return output
+	return output, outerr
 end
 
 function Executor:submit(cmd, ...)
@@ -76,16 +78,20 @@ function Executor:submit(cmd, ...)
 	return self
 end
 
-function Executor:wait()
+function Executor:wait(verbose)
 	local results = {}
 	local errors = {}
 
 	for i, t in ipairs(self.tasks) do
-		local ok, result = pcall(function() return t:wait() end)
+		local ok, result, err = pcall(function() return t:wait() end)
 		results[#results+1] = {ok, result}
 
 		if not ok then
 			errors[#errors+1] = ('task `%s` has failed: %s'):format(t.cmd, result)
+		end
+
+		if verbose then
+			print(result, err)
 		end
 	end
 

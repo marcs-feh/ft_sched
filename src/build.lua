@@ -136,7 +136,7 @@ function execute_build(flash_serial)
 		print(output..' -> '..dest)
 
 		print('Building image')
-		exec:submit('make -C stm32 -j4'):wait()
+		exec:submit('make -C stm32 -j4'):wait(true)
 
 		if flash_serial then
 			print('Flashing to ' .. tostring(flash_serial))
