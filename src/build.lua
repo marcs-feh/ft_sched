@@ -1,12 +1,11 @@
-local ap = require 'argparse'
-local ex = require 'executor'
+local u = require 'build_utility'
 
 local platform = false
 local build_mode = 'debug'
 local now = os.date('%Y-%m-%d %H:%M:%S', os.time())
 
 function main()
-	local arg_parser = ap.Parser:new(arg[0] .. ' <platform> [options]')
+	local arg_parser = u.Parser:new(arg[0] .. ' <platform> [options]')
 	arg_parser:add('generate', 'Generate code before compiling')
 	arg_parser:add('mode', 'Build mode [debug|release]. Default is debug', true)
 
@@ -14,7 +13,9 @@ function main()
 	local valid_platforms = {linux = true, windows = true, stm32blackpill = true}
 
 	if not valid_platforms[platform] then
-		error('invalid platform: ' .. platform)
+		print('error: invalid platform ' .. tostring(platform))
+		print(arg_parser:usage_message())
+		os.exit(1)
 	end
 
 	local ok, flags = pcall(function() return arg_parser:parse(arg) end)
@@ -47,7 +48,7 @@ function execute_build()
 	local ldflags = {}
 	local ar = 'ar'
 
-	local exec = ex.Executor:new()
+	local exec = u.Executor:new()
 
 	local sources = {
 		'main.cpp',
@@ -111,6 +112,7 @@ function execute_build()
 		local obj = ('build/%s.o'):format(file)
 		exec:submit('%s %s -c %s -o %s', cc, join_space(cflags), file, obj)
 		objects[#objects+1] = obj
+		print(file)
 	end
 
 	exec:wait()
