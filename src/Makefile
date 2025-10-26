@@ -1,13 +1,13 @@
-# Auto generated at 2025-10-25 21:18:20
-CC = clang++
-AR = ar
-CFLAGS = -std=c++20 -fwrapv -fno-strict-aliasing -fno-rtti -fno-exceptions -I. -D_CRT_SECURE_NO_WARNINGS -g3 -O0
+# Auto generated at 2025-10-25 21:47:31
+CC = arm-none-eabi-g++
+AR = arm-none-eabi-ar
+CFLAGS = -std=c++20 -fwrapv -fno-strict-aliasing -fno-rtti -fno-exceptions -I. -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -ffunction-sections -fdata-sections -fstack-usage -nostdlib -I./stm32/Core/Inc -I./stm32/Middlewares/Third_Party/FreeRTOS/Source/include -I./stm32/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2 -I./stm32/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F -DFT_SCHED_NO_MAIN -g3 -O0
 WFLAGS = -Wall -Wextra -Werror=return-type
 LDFLAGS = 
 
 .PHONY: clean all
 
-all: ft_sched.exe Makefile
+all: libft_sched.a Makefile
 
 -include main.cpp.d
 main.cpp.o: main.cpp
@@ -21,12 +21,12 @@ base.cpp.o: base.cpp
 ft_sched.cpp.o: ft_sched.cpp
 	$(CC) $(CFLAGS) $(WFLAGS) -c ft_sched.cpp -MMD -MF ft_sched.cpp.d -o ft_sched.cpp.o
 
--include platform_windows.cpp.d
-platform_windows.cpp.o: platform_windows.cpp
-	$(CC) $(CFLAGS) $(WFLAGS) -c platform_windows.cpp -MMD -MF platform_windows.cpp.d -o platform_windows.cpp.o
+-include platform_stm32f411ceu6.cpp.d
+platform_stm32f411ceu6.cpp.o: platform_stm32f411ceu6.cpp
+	$(CC) $(CFLAGS) $(WFLAGS) -c platform_stm32f411ceu6.cpp -MMD -MF platform_stm32f411ceu6.cpp.d -o platform_stm32f411ceu6.cpp.o
 
-ft_sched.exe: main.cpp.o base.cpp.o ft_sched.cpp.o platform_windows.cpp.o
-	$(CC) -o ft_sched.exe $(LDFLAGS) main.cpp.o base.cpp.o ft_sched.cpp.o platform_windows.cpp.o
+libft_sched.a: main.cpp.o base.cpp.o ft_sched.cpp.o platform_stm32f411ceu6.cpp.o
+	$(AR) rcs libft_sched.a main.cpp.o base.cpp.o ft_sched.cpp.o platform_stm32f411ceu6.cpp.o
 clean:
-	busybox rm -f main.cpp.o base.cpp.o ft_sched.cpp.o platform_windows.cpp.o main.cpp.d base.cpp.d ft_sched.cpp.d platform_windows.cpp.d ft_sched.exe
+	busybox rm -f nil main.cpp.o base.cpp.o ft_sched.cpp.o platform_stm32f411ceu6.cpp.o main.cpp.d base.cpp.d ft_sched.cpp.d platform_stm32f411ceu6.cpp.d *.su
 

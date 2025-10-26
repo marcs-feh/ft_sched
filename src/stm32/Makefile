@@ -182,7 +182,7 @@ LDSCRIPT = STM32F411XX_FLASH.ld
 
 # libraries
 LIBS = -lc -lm -lnosys -lft_sched
-LIBDIR = -L.
+LIBDIR = -L. -L./..
 LDFLAGS = $(MCU) -specs=nano.specs -T$(LDSCRIPT) $(LIBDIR) $(LIBS) -Wl,-Map=$(BUILD_DIR)/$(TARGET).map,--cref -Wl,--gc-sections
 
 # default action: build all
@@ -211,10 +211,7 @@ $(BUILD_DIR)/%.o: %.s Makefile | $(BUILD_DIR)
 $(BUILD_DIR)/%.o: %.S Makefile | $(BUILD_DIR)
 	$(AS) -c $(CFLAGS) $< -o $@
 
-libft_sched.a:
-	make -C ..
-
-$(BUILD_DIR)/$(TARGET).elf: $(OBJECTS) Makefile libft_sched.a
+$(BUILD_DIR)/$(TARGET).elf: $(OBJECTS) Makefile
 	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
 	$(SZ) $@
 

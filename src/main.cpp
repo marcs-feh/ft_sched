@@ -258,3 +258,6 @@ int main()
 	entrypoint();
 }
 
+#include "base.cpp"
+#include "ft_sched.cpp"
+

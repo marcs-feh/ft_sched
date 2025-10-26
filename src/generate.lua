@@ -2,7 +2,7 @@ local platform = arg[1] or error('Required platform')
 local build_mode = arg[2] or 'debug'
 local now = os.date('%Y-%m-%d %H:%M:%S', os.time())
 
-function generate_makefile()
+function generate_build_script()
 	local cc = 'clang++'
 	local cflags = {'-std=c++20', '-fwrapv', '-fno-strict-aliasing', '-fno-rtti', '-fno-exceptions', '-I.'}
 	local wflags = {'-Wall', '-Wextra', '-Werror=return-type'}
@@ -12,8 +12,6 @@ function generate_makefile()
 	local sb = Builder:new()
 	local sources = {
 		'main.cpp',
-		'base.cpp',
-		'ft_sched.cpp',
 	}
 	local objects = {}
 
@@ -38,7 +36,7 @@ function generate_makefile()
 			-- This is usually the default but it's better to be sure
 			'-ffunction-sections',
 			'-fdata-sections',
-			'-fstack-usage',
+			-- '-fstack-usage',
 
 			'-nostdlib',
 
@@ -54,6 +52,7 @@ function generate_makefile()
 		sources[#sources+1] = 'platform_stm32f411ceu6.cpp'
 	end
 
+
 	if build_mode == 'debug' then
 		cflags[#cflags+1] = '-g3'
 		cflags[#cflags+1] = '-O0'
@@ -61,52 +60,38 @@ function generate_makefile()
 		cflags[#cflags+1] = '-Os'
 	end
 
+	cflags = join_list(cflags, wflags)
+
 	local output = 'ft_sched.exe'
 	if platform == 'stm32blackpill' then
 		output = 'libft_sched.a'
 	end
 
-
 	sb:line('# Auto generated at %s', now)
-	sb:line('CC = %s', cc)
-	sb:line('AR = %s', ar)
-	sb:line('CFLAGS = %s', join_space(cflags))
-	sb:line('WFLAGS = %s', join_space(wflags))
-	sb:line('LDFLAGS = %s', join_space(ldflags))
-	sb:line()
-	sb:line('.PHONY: clean all'):line()
-
-	sb:line('all: %s Makefile', output):line()
-
-	local deps = {}
+	sb:line('set -eu')
+	sb:line('mkdir -p build')
 
 	for _, file in ipairs(sources) do
-		local obj = file .. '.o'
-		local dep = file .. '.d'
-		sb:line('-include %s', dep)
-		sb:line('%s: %s', obj, file)
-		sb:line('\t$(CC) $(CFLAGS) $(WFLAGS) -c %s -MMD -MF %s -o %s', file, dep, obj):line()
-
+		local obj = ('build/%s.o'):format(file)
+		sb:line('%s %s -c %s -o %s &', cc, join_space(cflags), file, obj)
 		objects[#objects+1] = obj
-		deps[#deps+1] = dep
 	end
+	sb:line('wait')
 
-	sb:line('%s: %s', output, join_space(objects))
+	local output = 'build/ft_sched.exe'
+
 	if platform == 'stm32blackpill' then
-		sb:line('\t$(AR) rcs %s %s', output, join_space(objects))
-		sb:line('\tcp %s stm32/%s', output, output)
+		output = 'build/libft_sched.a'
+		sb:line('%s rcs %s %s', ar, output, join_space(objects), join_space(ldflags))
 	else
-		sb:line('\t$(CC) -o %s $(LDFLAGS) %s', output, join_space(objects))
+		sb:line('%s -o %s %s', cc, output, join_space(objects), join_space(ldflags))
 	end
-
-	local rm_cmd = platform == 'windows' and 'busybox rm' or 'rm'
-	sb:line('clean:\n\t%s -f %s %s %s', rm_cmd, join_space(objects), join_space(deps), output)
-
+	sb:line('echo Finished')
 
 	sb:line():line()
-	local f = io.open('Makefile', 'wb')
+	local f = io.open('build.sh', 'wb')
 	f:write(sb:to_string())
-	print(('Generated Makefile (%s/%s)'):format(titlecase(build_mode), titlecase(platform)))
+	print(('Generated build.sh (%s/%s)'):format(titlecase(build_mode), titlecase(platform)))
 end
 
 function generate_crc32()
@@ -213,6 +198,6 @@ if not valid_platforms[platform] then
 	error('Invalid platform', 1)
 end
 
-generate_makefile()
+generate_build_script()
 generate_crc32()
 
