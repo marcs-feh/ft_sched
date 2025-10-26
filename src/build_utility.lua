@@ -173,6 +173,7 @@ function Parser:add(flag, info, required_arg)
 	assert(not self.flags_index[flag], 'flag already exists: ' .. flag)
 	self.known_flags[#self.known_flags + 1] = Flag:new(flag, info, required_arg or false)
 	self.flags_index[flag] = #self.known_flags
+	return self
 end
 
 function Parser:usage_message()

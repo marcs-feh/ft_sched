@@ -242,9 +242,8 @@ void entrypoint(){
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
 	auto s = make_slice<i32>(&main_arena, 69);
 	for(usize i = 0; i < s.len; i+=1){
-		s[i] = i;
+		s[i] = i * 2 - 1;
 	}
-
 	print_slice(s, "%d");
 }
 

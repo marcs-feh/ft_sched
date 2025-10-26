@@ -6,8 +6,10 @@ local now = os.date('%Y-%m-%d %H:%M:%S', os.time())
 
 function main()
 	local arg_parser = u.Parser:new(arg[0] .. ' <platform> [options]')
-	arg_parser:add('generate', 'Generate code before compiling')
-	arg_parser:add('mode', 'Build mode [debug|release]. Default is debug', true)
+	arg_parser
+		:add('generate', 'Generate code before compiling')
+		:add('mode', 'Build mode [debug|release]. Default is debug', true)
+		:add('flash', 'Flash STM32 with provided serial number', true)
 
 	platform = arg[1]
 	local valid_platforms = {linux = true, windows = true, stm32blackpill = true}
@@ -32,16 +34,21 @@ function main()
 		build_mode = flags.mode.value
 	end
 
+	local flash_serial = nil
+	if flags.flash then
+		flash_serial = flags.flash.value
+	end
+
 	if flags.generate then
 		generate_crc32()
 	end
 
 	local target_name = ('%s/%s'):format(titlecase(build_mode), titlecase(platform))
 	print('Building for ' .. target_name)
-	execute_build()
+	execute_build(flash_serial)
 end
 
-function execute_build()
+function execute_build(flash_serial)
 	local cc = 'clang++'
 	local cflags = {'-std=c++20', '-fwrapv', '-fno-strict-aliasing', '-fno-rtti', '-fno-exceptions', '-I.'}
 	local wflags = {'-Wall', '-Wextra', '-Werror=return-type'}
@@ -121,20 +128,26 @@ function execute_build()
 
 	if platform == 'stm32blackpill' then
 		output = 'build/libft_sched.a'
-		exec:submit('%s rcs %s %s', ar, output, join_space(objects), join_space(ldflags))
+		exec:submit('%s rcs %s %s', ar, output, join_space(objects), join_space(ldflags)):wait()
+		print(output)
+
+		local dest = output:gsub('build/', 'stm32/', 1)
+		os.rename(output, dest)
+		print(output..' -> '..dest)
+
+		print('Building image')
+		exec:submit('make -C stm32 -j4'):wait()
+
+		if flash_serial then
+			print('Flashing to ' .. tostring(flash_serial))
+			exec:submit('st-flash --serial %s --connect-under-reset write stm32/build/stm32.bin 0x08000000', flash_serial):wait()
+		end
 	else
 		exec:submit('%s -o %s %s', cc, output, join_space(objects), join_space(ldflags))
+		print(output)
 	end
-	print(output)
 
-	exec:wait()
-
-	-- sb:line():line()
-	-- local f = io.open('build.sh', 'wb')
-	-- f:write(sb:to_string())
-	-- print(('Generated build.sh [%s]'):format(target_name))
 end
-
 
 function generate_crc32()
 	local sb = Builder:new()
