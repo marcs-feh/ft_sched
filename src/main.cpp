@@ -237,6 +237,7 @@ Arena main_arena;
 constexpr usize main_arena_size = 4096;
 u8 main_arena_memory[main_arena_size];
 
+static
 void entrypoint(){
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
 	auto s = make_slice<i32>(&main_arena, 69);
@@ -247,14 +248,13 @@ void entrypoint(){
 	print_slice(s, "%d");
 }
 
-extern "C" {
-void ft_sched_entrypoint(){
+
+#if defined(FT_SCHED_NO_MAIN)
+extern "C" void ft_sched_entrypoint()
+#else
+int main()
+#endif
+{
 	entrypoint();
 }
-}
 
-#if 0
-int main() {
-	ft_sched_entrypoint();
-}
-#endif

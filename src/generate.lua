@@ -46,6 +46,8 @@ function generate_makefile()
 			'-I./stm32/Middlewares/Third_Party/FreeRTOS/Source/include',
 			'-I./stm32/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2',
 			'-I./stm32/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F',
+
+			'-DFT_SCHED_NO_MAIN',
 		}
 
 		cflags = join_list(cflags, stm32flags)
@@ -83,7 +85,7 @@ function generate_makefile()
 		local dep = file .. '.d'
 		sb:line('-include %s', dep)
 		sb:line('%s: %s', obj, file)
-		sb:line('\t$(CC) $(CFLAGS) $(WFLAGS) -c %s -MD -MF %s -o %s', file, dep, obj):line()
+		sb:line('\t$(CC) $(CFLAGS) $(WFLAGS) -c %s -MMD -MF %s -o %s', file, dep, obj):line()
 
 		objects[#objects+1] = obj
 		deps[#deps+1] = dep
@@ -97,7 +99,8 @@ function generate_makefile()
 		sb:line('\t$(CC) -o %s $(LDFLAGS) %s', output, join_space(objects))
 	end
 
-	sb:line('clean:\n\trm -f %s %s %s', join_space(objects), join_space(deps), output)
+	local rm_cmd = platform == 'windows' and 'busybox rm' or 'rm'
+	sb:line('clean:\n\t%s -f %s %s %s', rm_cmd, join_space(objects), join_space(deps), output)
 
 
 	sb:line():line()
