@@ -106,13 +106,13 @@ function execute_build()
 		output = 'libft_sched.a'
 	end
 
-	pcall(function () task:new('mkdir build'):wait() end)
+	pcall(function () u.Task:new('mkdir build'):wait() end)
 
 	for _, file in ipairs(sources) do
 		local obj = ('build/%s.o'):format(file)
 		exec:submit('%s %s -c %s -o %s', cc, join_space(cflags), file, obj)
 		objects[#objects+1] = obj
-		print(file)
+		print(obj)
 	end
 
 	exec:wait()
