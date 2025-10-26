@@ -62,8 +62,6 @@ void RawTask::_join_and_deinit_specifics(){
 	unimplemented();
 }
 
-constexpr u32 MAX_DELAY = 1'000'000'000;
-
 void sleep_for(Duration d){
 	u32 ms = d.to_milli();
 	osDelay(ms);
