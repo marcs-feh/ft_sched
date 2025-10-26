@@ -113,11 +113,7 @@ function execute_build(flash_serial)
 		output = 'libft_sched.a'
 	end
 
-	pcall(function ()
-		local t = u.Task:new('mkdir build')
-		print('dir:', t.error_log_pathh)
-		t:wait()
-	end)
+	pcall(function () u.Task:new('mkdir build'):wait() end)
 
 	for _, file in ipairs(sources) do
 		local obj = ('build/%s.o'):format(file)
@@ -144,7 +140,7 @@ function execute_build(flash_serial)
 
 		if flash_serial then
 			print('Flashing to ' .. tostring(flash_serial))
-			exec:submit('st-flash --serial %s --connect-under-reset write stm32/build/stm32.bin 0x08000000', flash_serial):wait()
+			exec:submit('st-flash --serial %s --connect-under-reset write stm32/build/stm32.bin 0x08000000', flash_serial)
 		end
 	else
 		exec:submit('%s -o %s %s', cc, output, join_space(objects), join_space(ldflags))
