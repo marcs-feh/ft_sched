@@ -46,31 +46,53 @@ function Task:wait()
 	end
 
 	local output = self.handle:read('*a')
+	local ok = true;
 	local status = self.handle:close()
 	self.running = false
 
 	if not status then
 		local f = io.open(self.error_log_path, 'rb')
 		assert(f, 'command failed and could not read its output')
-		output = f:read('*a')
+		output = output .. '\n' .. f:read('*a')
 		f:close()
+		ok = false
+	end
+
+	os.remove(self.error_log_path)
+	if not ok then
 		error(output, 2)
 	end
 
 	return output
 end
 
-function Executor:submit(cmd)
-	local t = Task:new(cmd)
+function Executor:submit(cmd, ...)
+	local t = Task:new(cmd:format(...))
 	self.tasks[#self.tasks+1] = t
 	t:run()
+	return self
 end
 
 function Executor:wait()
-	for _, t in ipairs(self.tasks) do
-		t:wait()
+	local results = {}
+	local errors = {}
+
+	for i, t in ipairs(self.tasks) do
+		local ok, result = pcall(function() return t:wait() end)
+		results[#results+1] = {ok, result}
+
+		if not ok then
+			errors[#errors+1] = ('task `%s` has failed: %s'):format(t.cmd, result)
+		end
 	end
+
+	if #errors > 0 then
+		error(table.concat(errors, '\n'), 	2)
+	end
+
 	self.tasks = {}
+
+	return results
 end
 
 M.Executor = Executor

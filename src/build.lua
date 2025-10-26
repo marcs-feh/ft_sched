@@ -10,16 +10,22 @@ function main()
 	arg_parser:add('generate', 'Generate code before compiling')
 	arg_parser:add('mode', 'Build mode [debug|release]. Default is debug', true)
 
-	local platform = arg[1]
+	platform = arg[1]
 	local valid_platforms = {linux = true, windows = true, stm32blackpill = true}
 
 	if not valid_platforms[platform] then
 		error('invalid platform: ' .. platform)
 	end
 
-	local flags = arg_parser:parse(arg)
+	local ok, flags = pcall(function() return arg_parser:parse(arg) end)
+	if not ok then
+		print('error: ' .. tostring(flags))
+		print(arg_parser:usage_message())
+		os.exit(1)
+	end
+
 	if flags.mode then
-		if (flags.mode ~= 'debug') and (flags.mode ~= 'release') then
+		if (flags.mode.value ~= 'debug') and (flags.mode.value ~= 'release') then
 			error('invalid build mode: ' .. flags.mode.value)
 		end
 		build_mode = flags.mode.value
@@ -28,20 +34,21 @@ function main()
 	if flags.generate then
 		generate_crc32()
 	end
+
+	local target_name = ('%s/%s'):format(titlecase(build_mode), titlecase(platform))
+	print('Building for ' .. target_name)
+	execute_build()
 end
 
 function execute_build()
-	local target_name = ('%s/%s'):format(titlecase(build_mode), titlecase(platform))
-
 	local cc = 'clang++'
 	local cflags = {'-std=c++20', '-fwrapv', '-fno-strict-aliasing', '-fno-rtti', '-fno-exceptions', '-I.'}
 	local wflags = {'-Wall', '-Wextra', '-Werror=return-type'}
 	local ldflags = {}
 	local ar = 'ar'
 
-	local exec = Executor{}
-
 	local exec = ex.Executor:new()
+
 	local sources = {
 		'main.cpp',
 	}
@@ -98,28 +105,32 @@ function execute_build()
 		output = 'libft_sched.a'
 	end
 
-	exec:submit('mkdir -p build')
+	pcall(function () task:new('mkdir build'):wait() end)
 
 	for _, file in ipairs(sources) do
 		local obj = ('build/%s.o'):format(file)
-		sb:line('%s %s -c %s -o %s &', cc, join_space(cflags), file, obj)
+		exec:submit('%s %s -c %s -o %s', cc, join_space(cflags), file, obj)
 		objects[#objects+1] = obj
 	end
+
+	exec:wait()
 
 	local output = 'build/ft_sched.exe'
 
 	if platform == 'stm32blackpill' then
 		output = 'build/libft_sched.a'
-		sb:line('%s rcs %s %s', ar, output, join_space(objects), join_space(ldflags))
+		exec:submit('%s rcs %s %s', ar, output, join_space(objects), join_space(ldflags))
 	else
-		sb:line('%s -o %s %s', cc, output, join_space(objects), join_space(ldflags))
+		exec:submit('%s -o %s %s', cc, output, join_space(objects), join_space(ldflags))
 	end
-	sb:line('echo Finished [%s]', target_name)
+	print(output)
 
-	sb:line():line()
-	local f = io.open('build.sh', 'wb')
-	f:write(sb:to_string())
-	print(('Generated build.sh [%s]'):format(target_name))
+	exec:wait()
+
+	-- sb:line():line()
+	-- local f = io.open('build.sh', 'wb')
+	-- f:write(sb:to_string())
+	-- print(('Generated build.sh [%s]'):format(target_name))
 end
 
 
@@ -145,6 +156,7 @@ function generate_crc32()
 
 	local f = io.open('crc32_lut.gen.cpp', 'wb')
 	f:write(sb:to_string())
+	f:close()
 	print(('Generated crc32_lut.gen.cpp [P = 0x%08X]'):format(polynomial))
 end
 
@@ -222,5 +234,8 @@ function join_list(a, b)
 	return res
 end
 
-
-main()
+local ok, err = pcall(main)
+if not ok then
+	print('error: '.. tostring(err))
+	os.exit(1)
+end

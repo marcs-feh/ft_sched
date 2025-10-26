@@ -12,3 +12,4 @@
 .ninja_*
 build
 *.d
+*.log
