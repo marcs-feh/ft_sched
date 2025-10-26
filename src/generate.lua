@@ -3,17 +3,21 @@ local build_mode = arg[2] or 'debug'
 local now = os.date('%Y-%m-%d %H:%M:%S', os.time())
 
 function generate_build_script()
+	local target_name = ('%s/%s'):format(titlecase(build_mode), titlecase(platform))
+
 	local cc = 'clang++'
 	local cflags = {'-std=c++20', '-fwrapv', '-fno-strict-aliasing', '-fno-rtti', '-fno-exceptions', '-I.'}
 	local wflags = {'-Wall', '-Wextra', '-Werror=return-type'}
 	local ldflags = {}
 	local ar = 'ar'
 
+
 	local sb = Builder:new()
 	local sources = {
 		'main.cpp',
 	}
 	local objects = {}
+
 
 	if platform == 'linux' then
 		cflags[#cflags+1] = '-fPIC'
@@ -86,12 +90,12 @@ function generate_build_script()
 	else
 		sb:line('%s -o %s %s', cc, output, join_space(objects), join_space(ldflags))
 	end
-	sb:line('echo Finished')
+	sb:line('echo Finished [%s]', target_name)
 
 	sb:line():line()
 	local f = io.open('build.sh', 'wb')
 	f:write(sb:to_string())
-	print(('Generated build.sh (%s/%s)'):format(titlecase(build_mode), titlecase(platform)))
+	print(('Generated build.sh [%s]'):format(target_name))
 end
 
 function generate_crc32()
@@ -116,7 +120,7 @@ function generate_crc32()
 
 	local f = io.open('crc32_lut.gen.cpp', 'wb')
 	f:write(sb:to_string())
-	print(('Generated crc32_lut.gen.cpp (P = 0x%08X)'):format(polynomial))
+	print(('Generated crc32_lut.gen.cpp [P = 0x%08X]'):format(polynomial))
 end
 
 function new_c32_lut(polynomial)
@@ -131,7 +135,7 @@ function new_c32_lut(polynomial)
 
         for bit = 8, 1, -1 do
             if (remainder & TOP_BIT) ~= 0 then
-                remainder = ((remainder << 1) & 0xFFFFFFFF) -- Truncate to 32bit
+                remainder = (remainder << 1) & 0xFFFFFFFF -- Truncate to 32bit
                 remainder = remainder ~ polynomial
             else
                 remainder = (remainder << 1) & 0xFFFFFFFF  -- Truncate to 32bit
