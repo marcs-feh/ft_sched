@@ -113,7 +113,11 @@ function execute_build(flash_serial)
 		output = 'libft_sched.a'
 	end
 
-	pcall(function () u.Task:new('mkdir build'):wait() end)
+	pcall(function ()
+		local t = u.Task:new('mkdir build')
+		print('dir:', t.error_log_pathh)
+		t:wait()
+	end)
 
 	for _, file in ipairs(sources) do
 		local obj = ('build/%s.o'):format(file)
@@ -147,6 +151,7 @@ function execute_build(flash_serial)
 		print(output)
 	end
 
+	exec:wait()
 end
 
 function generate_crc32()

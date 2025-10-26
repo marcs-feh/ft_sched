@@ -54,9 +54,10 @@ function Task:wait()
 
 	if not status then
 		local f = io.open(self.error_log_path, 'rb')
-		assert(f, 'command failed and could not read its output')
-		output = output .. '\n' .. f:read('*a')
-		f:close()
+		if f then
+			output = output .. '\n' .. f:read('*a')
+			f:close()
+		end
 		ok = false
 	end
 

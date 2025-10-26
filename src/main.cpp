@@ -1,6 +1,4 @@
-#if 0
 #include <stdio.h>
-#include <math.h>
 
 #include "base.hpp"
 
@@ -25,12 +23,6 @@ void print_slice(Slice<T> slice, char const* elem_fmt){
 	} printf("]\n");
 }
 
-// static
-// i32 randint(i32 a, i32 b){
-//     return (rand() % (b - a + 1)) + a;
-// }
-
-// init_spsc_queue()
 struct Unit{};
 
 Arena permanent_arena;
@@ -159,6 +151,33 @@ struct Deadline {
 	RawTask* task{nullptr};
 };
 
+
+Arena main_arena;
+constexpr usize main_arena_size = 4096;
+u8 main_arena_memory[main_arena_size];
+
+attribute_force_inline static inline
+void entrypoint(){
+	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
+	auto s = make_slice<i32>(&main_arena, 69);
+	for(usize i = 0; i < s.len; i+=1){
+		s[i] = i * 2 - 1;
+	}
+	print_slice(s, "%d");
+}
+
+#if defined(FT_SCHED_NO_MAIN)
+extern "C" void ft_sched_entrypoint()
+#else
+int main()
+#endif
+{
+	entrypoint();
+}
+
+#include "base.cpp"
+#include "ft_sched.cpp"
+
 // struct DeadlineWatcher {
 // 	Slice<Deadline> deadlines;
 // 	DeadlineHandle first;
@@ -199,64 +218,3 @@ struct Deadline {
 //
 // 	// void check(){}
 // };
-
-int main(){
-	srand(tick_now());
-	permanent_arena = arena_from_buffer(Slice<u8>{&permanent_arena_data[0], sizeof(permanent_arena_data)});
-	start = tick_now();
-	usize arena_size = 8 * mem_kilobyte;
-	u8* arena_data = new u8[arena_size];
-
-	Arena arena = arena_from_buffer(Slice<u8>{&arena_data[0], arena_size});
-	print_info();
-
-	auto foo = make_simple_task(&arena, [](){return 1;});
-	foo->run();
-	int n = foo->result();
-	printf("Foo: %d\n", n);
-	printf("Sizeof handle: %td\n", sizeof(DeadlineHandle));
-	printf("Sizeof foo: %td (overhead: %td)\n", sizeof(*foo), sizeof(*foo) - sizeof(RawTask));
-}
-#endif
-
-#include "base.hpp"
-extern "C" {
-	int printf(char const*, ...);
-}
-
-template<class T>
-void print_slice(Slice<T> slice, char const* elem_fmt){
-	printf("len: %td [ ", slice.len);
-	for(usize i = 0; i < slice.len; i ++){
-		printf(elem_fmt, slice[i]);
-		printf(" ");
-	} printf("]\r\n");
-}
-
-Arena main_arena;
-constexpr usize main_arena_size = 4096;
-u8 main_arena_memory[main_arena_size];
-
-static
-void entrypoint(){
-	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
-	auto s = make_slice<i32>(&main_arena, 69);
-	for(usize i = 0; i < s.len; i+=1){
-		s[i] = i * 2 - 1;
-	}
-	print_slice(s, "%d");
-}
-
-
-#if defined(FT_SCHED_NO_MAIN)
-extern "C" void ft_sched_entrypoint()
-#else
-int main()
-#endif
-{
-	entrypoint();
-}
-
-#include "base.cpp"
-#include "ft_sched.cpp"
-
