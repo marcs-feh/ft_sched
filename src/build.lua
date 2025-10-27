@@ -46,6 +46,7 @@ function main()
 	local target_name = ('%s/%s'):format(titlecase(build_mode), titlecase(platform))
 	print('Building for ' .. target_name)
 	execute_build(flash_serial)
+	print('Done')
 end
 
 function execute_build(flash_serial)

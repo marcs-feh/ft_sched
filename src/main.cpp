@@ -60,12 +60,9 @@ void print_info(){
 	auto buf = Slice<u8>(&bufdata[0], sizeof(bufdata));
 	String msg;
 
-	msg = buffer_printf(buf, "Address Width:  %zu-bit", sizeof(void*) * 8);
-	printf("%s\r\n", msg.data);
-	msg = buffer_printf(buf, "Tick Frequency: %tu Hz", tick_frequency());
-	printf("%s\r\n", msg.data);
-	msg = buffer_printf(buf, "RawTask size:   %td", sizeof(RawTask));
-	printf("%s\r\n", msg.data);
+	msg = buffer_printf(buf, "Address Width:  %zu-bit", sizeof(void*) * 8); puts(msg.data);
+	msg = buffer_printf(buf, "Tick Frequency: %tu Hz", tick_frequency()); puts(msg.data);
+	msg = buffer_printf(buf, "RawTask size:   %td", sizeof(RawTask)); puts(msg.data);
 }
 
 TimeTick start = 0;
@@ -89,16 +86,7 @@ u8 main_arena_memory[main_arena_size];
 attribute_force_inline static inline
 void entrypoint(){
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
-	while(1){
-		// fflush(stdout);
-		print_info();
-		sleep_for(Duration::from_milli(750));
-	}
-	// auto s = make_slice<i32>(&main_arena, 69);
-	// for(usize i = 0; i < s.len; i+=1){
-	// 	s[i] = i * 2 - 1;
-	// }
-	// print_slice(s, "%d");
+	print_info();
 }
 
 //// ---------------------------------------------

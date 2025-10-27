@@ -2,7 +2,7 @@ local M = {}
 
 local Executor = {}
 
-M.REDIRECT_STDERR = '2>'
+M.REDIRECT_STDERR = '2>&1'
 
 function Executor:new()
 	local o = {}
@@ -17,10 +17,6 @@ end
 
 local Task = {}
 
-local function randlog()
-	return ('%06x.log'):format(math.random((1 << 20) - 1))
-end
-
 function Task:new(cmd)
 	local o = {}
 	setmetatable(o, self)
@@ -28,9 +24,8 @@ function Task:new(cmd)
 
 	assert(type(cmd) == 'string')
 
-	o.error_log_path = randlog()
-
-	o.cmd = cmd .. ' ' .. M.REDIRECT_STDERR  .. o.error_log_path
+	o.cmd = cmd .. ' ' .. M.REDIRECT_STDERR
+	o.running = false
 
 	return o
 end
@@ -52,23 +47,11 @@ function Task:wait()
 	local status = self.handle:close()
 	self.running = false
 
-	local f = io.open(self.error_log_path, 'rb')
-	if f then
-		outerr = f:read('*a')
-		f:close()
-	end
-
 	if not status then
-		outerr = output .. '\n' .. outerr
-		ok = false
-	end
-
-	os.remove(self.error_log_path)
-	if not ok then
 		error(output, 2)
 	end
 
-	return output, outerr
+	return output
 end
 
 function Executor:submit(cmd, ...)
