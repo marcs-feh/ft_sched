@@ -70,9 +70,9 @@ struct RawTask : Task {
 	void _join_and_deinit_specifics();
 };
 
-bool init_raw_task(RawTask* task, Arena* a, RawTaskFunc func, void* args, usize args_size, usize args_align = default_argument_alignment);
+void init_raw_task(RawTask* task, Arena* a, RawTaskFunc func, void* args);
 
-RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args, usize args_size, usize args_align = default_argument_alignment);
+RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args);
 
 struct TMR_Task : Task {
 	Arena* arena = nullptr;

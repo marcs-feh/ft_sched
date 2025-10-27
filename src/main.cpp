@@ -87,6 +87,42 @@ attribute_force_inline static inline
 void entrypoint(){
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
 	print_info();
+
+	auto queue = make_spsc_queue<i32>(&main_arena, 20);
+
+	Duration producer_delay = Duration::from_milli(2);
+	auto producer = make_basic_task(&main_arena, [queue, &producer_delay](){
+		i32 n = 1;
+		while(1){
+			queue->push(n);
+			++n;
+			sleep_for(producer_delay);
+		}
+		return Unit{};
+	});
+
+	producer->run();
+
+	constexpr Duration delay = Duration::from_milli(30);
+	i32 prev = 0;	
+	for(int i = 0; i < 100; i++){
+		auto elem = queue->pop();
+		if(elem.ok()){
+			auto x = elem.unwrap();
+			printf("%d\n", x);
+			if(x - 1 != prev){
+				printf("--- Drop ---\n");
+			}
+			prev = x;
+		}
+		else {
+			printf("\n");
+		}
+		fflush(stdout);
+		sleep_for(delay);
+	}
+
+	printf("Producer delay %tdms\n", producer_delay.to_milli());
 }
 
 //// ---------------------------------------------
