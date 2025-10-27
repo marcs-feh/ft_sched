@@ -83,6 +83,9 @@ Arena main_arena;
 constexpr usize main_arena_size = 4096;
 u8 main_arena_memory[main_arena_size];
 
+
+
+
 attribute_force_inline static inline
 void entrypoint(){
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
@@ -90,37 +93,26 @@ void entrypoint(){
 
 	auto queue = make_spsc_queue<i32>(&main_arena, 20);
 
-	Duration producer_delay = Duration::from_milli(2);
+	Duration producer_delay = Duration::from_milli(10);
 	auto producer = make_basic_task(&main_arena, [queue, &producer_delay](){
-		i32 n = 1;
-		while(1){
-			queue->push(n);
-			++n;
-			sleep_for(producer_delay);
-		}
 		return Unit{};
 	});
 
-	producer->run();
+	Array<i32, 4> v0 = {1, 1, 2, 3};
+	Array<i32, 4> v1 = {-1, 1, 9, 3};
+	print_slice((v0 - v1).slice(), "%d");
 
-	constexpr Duration delay = Duration::from_milli(30);
-	i32 prev = 0;	
-	for(int i = 0; i < 100; i++){
-		auto elem = queue->pop();
-		if(elem.ok()){
-			auto x = elem.unwrap();
-			printf("%d\n", x);
-			if(x - 1 != prev){
-				printf("--- Drop ---\n");
-			}
-			prev = x;
-		}
-		else {
-			printf("\n");
-		}
-		fflush(stdout);
-		sleep_for(delay);
-	}
+	// producer->run();
+
+	// constexpr Duration delay = Duration::from_milli(30);
+	// i32 prev = 0;	
+	// for(int i = 0; i < 100; i++){
+	// 	auto elem = queue->pop();
+	// 	auto x = elem.unwrap_or(8);
+
+	// 	fflush(stdout);
+	// 	sleep_for(delay);
+	// }
 
 	printf("Producer delay %tdms\n", producer_delay.to_milli());
 }

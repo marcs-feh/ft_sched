@@ -386,6 +386,63 @@ struct Slice {
 
 };
 
+//// Array
+template<typename T, unsigned int N>
+struct Array {
+	T _v[N];
+
+	static_assert(N > 0, "Cannot have a zero sized array");
+
+	constexpr
+	T& operator[](unsigned int idx){
+		ensure(idx < N, "Out of bounds access");
+		return _v[idx];
+	}
+
+	constexpr
+	T const& operator[](unsigned int idx) const {
+		ensure(idx < N, "Out of bounds access");
+		return _v[idx];
+	}
+
+	Slice<T> slice(){
+		return Slice<T>(&_v[0], N);
+	}
+
+	// Macro tricks to generate all operators
+	#define ELEM_WISE_OP(op, ret) constexpr auto operator op (Array<T, N> const& x) const { \
+		Array<ret, N> res; \
+		for(int i = 0; i < N; ++i) res[i] = _v[i] op x._v[i]; \
+		return res; \
+	}
+
+	#define ELEM_UNARY_OP(op, ret) constexpr auto operator op () const { \
+		Array<ret, N> res; \
+		for(int i = 0; i < N; ++i) res[i] = op _v[i]; \
+		return res; \
+	}
+
+	#define X(op) ELEM_WISE_OP(op, T)
+		X(+) X(-) X(*) X(/) X(%) X(&) X(|) X(^)
+	#undef X
+
+	#define X(op) ELEM_UNARY_OP(op, T)
+		X(+) X(-) X(~)
+	#undef X
+
+	#define X(op) ELEM_WISE_OP(op, bool)
+		X(&&) X(||) X(==) X(!=) X(>=) X(<=) X(<) X(>)
+	#undef X
+		
+	#define X(op) ELEM_UNARY_OP(op, bool)
+		X(!)
+	#undef X
+
+	#undef ELEM_WISE_OP
+	#undef ELEM_UNARY_OP
+};
+
+
 //// Memory
 constexpr usize mem_kilobyte = 1024ll;
 constexpr usize mem_megabyte = 1024ll * 1024ll;
