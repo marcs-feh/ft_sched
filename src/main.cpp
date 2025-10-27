@@ -3,7 +3,6 @@
 #include "base.hpp"
 
 #include "ft_sched.hpp"
-#include "task.hpp"
 
 template<class T>
 void print_list(List<T> const& list, char const* elem_fmt){
@@ -83,38 +82,25 @@ Arena main_arena;
 constexpr usize main_arena_size = 4096;
 u8 main_arena_memory[main_arena_size];
 
+void execute(Task<i32> auto * t){
+	t->run();
+	while(!t->has_result())
+		sleep_for({0});
 
-
+	auto x = t->result().unwrap();
+	printf("x=%d\n", x);
+	t->join();
+}
 
 attribute_force_inline static inline
 void entrypoint(){
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
-	print_info();
 
-	auto queue = make_spsc_queue<i32>(&main_arena, 20);
-
-	Duration producer_delay = Duration::from_milli(10);
-	auto producer = make_basic_task(&main_arena, [queue, &producer_delay](){
-		return Unit{};
+	auto t = make_basic_task(&main_arena, [](){
+		print_info();
+		return i32(69);
 	});
-
-	Array<i32, 4> v0 = {1, 1, 2, 3};
-	Array<i32, 4> v1 = {-1, 1, 9, 3};
-	print_slice((v0 - v1).slice(), "%d");
-
-	// producer->run();
-
-	// constexpr Duration delay = Duration::from_milli(30);
-	// i32 prev = 0;	
-	// for(int i = 0; i < 100; i++){
-	// 	auto elem = queue->pop();
-	// 	auto x = elem.unwrap_or(8);
-
-	// 	fflush(stdout);
-	// 	sleep_for(delay);
-	// }
-
-	printf("Producer delay %tdms\n", producer_delay.to_milli());
+	execute(t);
 }
 
 //// ---------------------------------------------
@@ -130,43 +116,3 @@ int main()
 #include "base.cpp"
 #include "ft_sched.cpp"
 
-// struct DeadlineWatcher {
-// 	Slice<Deadline> deadlines;
-// 	DeadlineHandle first;
-//
-// 	void clear(){
-// 		for(u32 i = 0; i < deadlines.len; i += 1){
-// 			auto s = deadlines[i]._slot;
-//
-// 			deadlines[i]._slot.idx = min<u32>(i + 1, DeadlineHandle::max_idx);
-// 			deadlines[i]._slot.gen += min<u32>(s.gen + 1, DeadlineHandle::max_idx);
-// 		}
-// 		deadlines[deadlines.len-1]._slot = {0, 0};
-// 	}
-//
-// 	bool add(RawTask* t, Duration limit){
-// 		if(first.empty()){
-// 			return false;
-// 		}
-//
-// 		Deadline* d = &deadlines[first.idx];
-// 		first = d->_slot;
-//
-// 		d->last_tick = tick_now();
-// 		d->task = t;
-// 		d->limit = limit;
-//
-// 		return DeadlineHandle{};
-// 	}
-//
-// 	bool reset(DeadlineHandle h){
-// 		if(h.idx < deadlines.len){
-// 			return false;
-// 		}
-// 		auto d = &deadlines[h.idx];
-// 		ensure(h.gen == d._slot.gen, "Dangling node");
-// 		return d;
-// 	}
-//
-// 	// void check(){}
-// };

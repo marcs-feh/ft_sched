@@ -26,7 +26,6 @@ void trap(){
 
 //// FT_Sched platform specifics
 #include "ft_sched.hpp"
-#include "task.hpp"
 
 struct RawTaskPlatformSpecific {
 	pthread_t handle;

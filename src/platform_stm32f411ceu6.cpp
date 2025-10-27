@@ -25,7 +25,6 @@ void trap(){
 
 //// FT_Sched platform specifics
 #include "ft_sched.hpp"
-#include "task.hpp"
 
 struct RawTaskPlatformSpecific {
 	TaskHandle_t handle;
