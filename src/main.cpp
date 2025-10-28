@@ -66,24 +66,6 @@ void entrypoint(){
 	t->join();
 }
 
-template<typename T>
-concept CRC32_Checkable = requires(T const& obj) {
-	{ crc32(obj) } -> SameAs<u32>
-};
-
-template<CRC32_Checkable T>
-struct CRC32_Box {
-	T _data;
-	volatile u32 _crc;
-
-	bool check() const {
-		return crc32(_data) == _crc;
-	}
-
-	void recompute(){
-		_crc = crc32(_data);
-	}
-};
 
 //// ---------------------------------------------
 #if defined(FT_SCHED_NO_MAIN)

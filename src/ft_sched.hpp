@@ -4,7 +4,7 @@
 
 #if defined(__clang__) || defined(__GNUC__)
 	// Cause a full memory clobber, this emits no CPU instructions but prevents the compiler from doing certain loads
-	#define COMPILER_MEMORY_BARRIER() asm volatile("" : : : "memory") 
+	#define COMPILER_MEMORY_BARRIER() asm volatile("" : : : "memory")
 #else
 	#error "Unsupported compiler, need to have a COMPILER_MEMORY_BARRIER macro"
 #endif
@@ -69,7 +69,19 @@ Duration tick_diff(TimeTick a, TimeTick b){
 void sleep_for(Duration d);
 
 //// Integrity checking
+template<typename T>
+concept CRC32_Checkable = requires(T const& obj) {
+	{ crc32(obj) } -> SameAs<u32>;
+};
+
 u32 crc32(Slice<u8> buf);
+
+void crc32_ensure(volatile u32 expected, CRC32_Checkable auto const& obj){
+    volatile u32 cur = crc32(obj);
+    if(expected != cur){
+        panic("Failed CRC32 check");
+    }
+}
 
 //// Tasks
 enum TaskStatus : u8 {

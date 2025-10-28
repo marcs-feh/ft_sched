@@ -466,17 +466,6 @@ void* mem_zero(void* dest, isize n);
 
 void* mem_set(void* dest, u8 v, isize n);
 
-template <typename T>
-inline T volatile_read(T const * data) {
-    return *reinterpret_cast<volatile const T *>(data);
-}
-
-template <typename T, typename U>
-inline void volatile_write(T* data, U&& val) {
-    volatile T* vdata = reinterpret_cast<volatile T *>(data);
-    *vdata = forward<U>(val);
-}
-
 //// Arena
 struct Arena {
 	void* data;
