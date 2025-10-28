@@ -4,6 +4,8 @@
 
 #include "ft_sched.hpp"
 
+extern "C" int puts(char const*);
+
 template<class T>
 void print_list(List<T> const& list, char const* elem_fmt){
 	printf("len: %td cap: %td [ ", list.len, list.cap);
@@ -21,37 +23,6 @@ void print_slice(Slice<T> slice, char const* elem_fmt){
 		printf(" ");
 	} printf("]\n");
 }
-
-struct Unit{};
-
-Arena permanent_arena;
-u8 permanent_arena_data[4 * mem_kilobyte];
-
-//// Software watchdog timer
-// Atomic<TimeTick> watchdog_last_tick = 0;
-
-// void watchdog_timer_func(RawTask*){
-// 	const Duration limit = Duration::from_milli(500);
-// 	watchdog_last_tick = tick_now();
-
-// 	while(1){
-// 		auto now = tick_now();
-// 		auto elapsed = tick_diff(now, watchdog_last_tick.load(memory_order_relaxed));
-
-// 		if(elapsed > limit){
-// 			fprintf(stderr, "[WD] Failed! limit=%tdms elapsed=%tdms\n", limit.to_milli(), elapsed.to_milli());
-// 			panic("Watchdog fail.");
-// 		}
-// 		sleep_for(Duration::from_second(0));
-// 	}
-// }
-
-// void reset_watchdog(){
-// 	watchdog_last_tick.store(tick_now(), memory_order_relaxed);
-// }
-////-----------------------
-
-int puts(char const*);
 
 static
 void print_info(){
@@ -82,16 +53,6 @@ Arena main_arena;
 constexpr usize main_arena_size = 4096;
 u8 main_arena_memory[main_arena_size];
 
-void execute(Task<i32> auto * t){
-	t->run();
-	while(!t->has_result())
-		sleep_for({0});
-
-	auto x = t->result().unwrap();
-	printf("x=%d\n", x);
-	t->join();
-}
-
 attribute_force_inline static inline
 void entrypoint(){
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
@@ -100,8 +61,29 @@ void entrypoint(){
 		print_info();
 		return i32(69);
 	});
-	execute(t);
+
+	t->run();
+	t->join();
 }
+
+template<typename T>
+concept CRC32_Checkable = requires(T const& obj) {
+	{ crc32(obj) } -> SameAs<u32>
+};
+
+template<CRC32_Checkable T>
+struct CRC32_Box {
+	T _data;
+	volatile u32 _crc;
+
+	bool check() const {
+		return crc32(_data) == _crc;
+	}
+
+	void recompute(){
+		_crc = crc32(_data);
+	}
+};
 
 //// ---------------------------------------------
 #if defined(FT_SCHED_NO_MAIN)
@@ -116,3 +98,27 @@ int main()
 #include "base.cpp"
 #include "ft_sched.cpp"
 
+
+//// Software watchdog timer
+// Atomic<TimeTick> watchdog_last_tick = 0;
+
+// void watchdog_timer_func(RawTask*){
+// 	const Duration limit = Duration::from_milli(500);
+// 	watchdog_last_tick = tick_now();
+
+// 	while(1){
+// 		auto now = tick_now();
+// 		auto elapsed = tick_diff(now, watchdog_last_tick.load(memory_order_relaxed));
+
+// 		if(elapsed > limit){
+// 			fprintf(stderr, "[WD] Failed! limit=%tdms elapsed=%tdms\n", limit.to_milli(), elapsed.to_milli());
+// 			panic("Watchdog fail.");
+// 		}
+// 		sleep_for(Duration::from_second(0));
+// 	}
+// }
+
+// void reset_watchdog(){
+// 	watchdog_last_tick.store(tick_now(), memory_order_relaxed);
+// }
+////-----------------------

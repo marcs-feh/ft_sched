@@ -104,6 +104,9 @@ static_assert(AtomicBool::is_always_lock_free, "Expected bool to be lock-free");
 // Type tag used to differentiate operator new overloads and to ensure valid union active members
 struct Nat {};
 
+// Replacement for `void` when a complete type is needed
+struct Unit {};
+
 // Custom tagged operator new overload, to avoid clashes with other library defs and not need to include <new>
 inline void *operator new(decltype(sizeof 0), void* ptr, Nat) {
 	return ptr;
@@ -462,6 +465,17 @@ void* mem_copy_no_overlap(void* dest, void const* src, isize n);
 void* mem_zero(void* dest, isize n);
 
 void* mem_set(void* dest, u8 v, isize n);
+
+template <typename T>
+inline T volatile_read(T const * data) {
+    return *reinterpret_cast<volatile const T *>(data);
+}
+
+template <typename T, typename U>
+inline void volatile_write(T* data, U&& val) {
+    volatile T* vdata = reinterpret_cast<volatile T *>(data);
+    *vdata = forward<U>(val);
+}
 
 //// Arena
 struct Arena {
