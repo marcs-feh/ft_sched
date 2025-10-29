@@ -38,6 +38,7 @@ void _freertos_task_wrapper(void* task_ptr){
 	task->_status.store(TaskStatus_Started);
 	task->func(task);
 	task->_status.store(TaskStatus_Done);
+	vTaskDelete(NULL);
 }
 
 void RawTask::_init_specifics_and_run(){
@@ -50,7 +51,7 @@ void RawTask::_init_specifics_and_run(){
 		"Task",
 		rtos_stack_size_words,
 		(void*)this,
-		tskIDLE_PRIORITY,
+		osPriorityNormal,
 		&specific->handle
 	) == pdPASS;
 
@@ -58,7 +59,10 @@ void RawTask::_init_specifics_and_run(){
 }
 
 void RawTask::_join_and_deinit_specifics(){
-	unimplemented();
+//	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
+//	auto status = this->_status.load(memory_order_relaxed);
+//
+
 }
 
 void sleep_for(Duration d){

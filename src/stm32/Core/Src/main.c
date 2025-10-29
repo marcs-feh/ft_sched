@@ -69,8 +69,13 @@ void StartDefaultTask(void *argument);
 
 int _write(int file, char *ptr, int len) {
     uint8_t result = 0;
-
+    uint32_t attempts = 0;
     do {
+    	attempts += 1;
+    	if(attempts > 100){
+    		return 0;
+    	}
+
         result = CDC_Transmit_FS((uint8_t*)ptr, len);
         if (result == USBD_BUSY) {
             osThreadYield(); 
@@ -247,9 +252,10 @@ void StartDefaultTask(void *argument)
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 5 */
   /* Infinite loop */
-	  // printf("(skibidi) n = %d\r\n", n);
-  ft_sched_entrypoint();
-
+  while(1){
+	  printf("Enter Default task loop\r\n");
+	  ft_sched_entrypoint();
+  }
   /* USER CODE END 5 */
 }
 

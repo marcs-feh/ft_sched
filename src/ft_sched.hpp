@@ -76,7 +76,7 @@ concept CRC32_Checkable = requires(T const& obj) {
 
 u32 crc32(Slice<u8> buf);
 
-void crc32_ensure(volatile u32 expected, CRC32_Checkable auto const& obj){
+void crc32_ensure(u32 expected, CRC32_Checkable auto const& obj){
     volatile u32 cur = crc32(obj);
     if(expected != cur){
         panic("Failed CRC32 check");
@@ -293,6 +293,68 @@ struct TMR_Task {
 bool init_tmr_task(RawTask* task, Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args, usize args_size);
 
 TMR_Task* make_tmr_task(Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args, usize args_size);
+
+//// Deadlines
+struct DeadlineSlot {
+	int value;
+
+	TimeTick last_tick;
+	Duration limit;
+	RawTask* task;
+
+	void reset(){
+		last_tick = tick_now();
+	}
+};
+
+struct DeadlineWatcher {
+	Slice<DeadlineSlot> slots;
+	Spinlock _lock{};
+
+	auto lock_guard(){
+		return _lock.guard();
+	}
+
+	[[nodiscard]]
+	DeadlineSlot* add(RawTask* task, Duration limit);
+
+	void _remove_no_lock(DeadlineSlot* node);
+
+	void remove(DeadlineSlot* node);
+
+	void clear();
+
+	// Scan for deadline violations and remove Done tasks
+	void scan();
+
+	DeadlineWatcher()
+		: slots{}
+		, _lock{}
+	{}
+
+	// void display(){
+	// 	printf("Free: ");
+	// 	for(auto const& slot : slots){
+	// 		if(!slot.task){
+	// 			printf(" . ");
+	// 		}
+	// 	}
+	// 	printf("\n");
+
+	// 	printf("Check: ");
+	// 	for(auto const& slot : slots){
+	// 		if(slot.task){
+	// 			printf("%d ", (int)slot.limit.to_milli());
+	// 		}
+	// 	}
+	// 	printf("\n");
+	// }
+};
+
+void init_deadline_watcher(DeadlineWatcher* w, Slice<DeadlineSlot> slots);
+
+DeadlineWatcher* make_deadline_watcher(Arena* a, usize slot_count);
+
 
 #if 0
 struct TMR_Task {

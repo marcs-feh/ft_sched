@@ -19,7 +19,7 @@
 			"name": "Build STM32",
 			"working_dir": "$project_path/src",
 			"linux": {
-				"shell_cmd": "lua build.lua stm32blackpill -mode:release",
+				"shell_cmd": "lua build.lua stm32blackpill -mode:debug",
 			},
 		}
 	]
