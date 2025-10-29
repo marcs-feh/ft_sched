@@ -171,8 +171,24 @@ struct DeadlineWatcher {
 };
 
 void init_deadline_watcher(DeadlineWatcher* w, Slice<DeadlineSlot> slots){
+	mem_zero(w, sizeof(DeadlineWatcher));
 	w->slots = slots;
 	w->clear();
+}
+
+DeadlineWatcher* make_deadline_watcher(Arena* a, usize slot_count){
+	auto restore = a->offset;
+	auto watcher = make<DeadlineWatcher>(a);
+	auto slots = make_slice<DeadlineSlot>(a, slot_count);
+
+	if(!watcher || !slots){
+		a->offset = restore;
+		return nullptr;
+	}
+
+	watcher->slots = slots;
+	watcher->clear();
+	return watcher;
 }
 
 Arena main_arena;

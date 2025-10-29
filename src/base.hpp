@@ -381,6 +381,11 @@ struct Slice {
 		return data[idx];
 	}
 
+	// Implicit conversion, these are very rare but this allows the same idiom to check for pointer null for slices as well
+	operator bool() const {
+		return len != 0 || data == nullptr;
+	}
+
 	// C++ iterator stuff
 	auto begin(){
 		return detail::ContigousMemoryCppIterator<T>{ data };
