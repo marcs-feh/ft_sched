@@ -36,8 +36,8 @@ int error_printf(char const* filename, int line, char const* fmt, ...){
 }
 
 void panic_ex(char const* msg, char const* filename, int line){
-	error_printf(filename, line, "Panic: %s", msg);
-	trap();
+	error_printf(filename, line, "panic: %s", msg);
+	do { trap(); } while(1);
 }
 
 bool ensure_ex(bool pred, char const* msg, char const* filename, int line){

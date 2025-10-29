@@ -221,6 +221,8 @@ void error_write(cstring msg);
 
 [[noreturn]] void panic_ex(char const* msg, char const* filename, int line);
 
+[[noreturn]] void panicf_ex(char const* fmt, cstring file, i32 line, ...);
+
 bool ensure_ex(bool pred, char const* msg, char const* filename, int line);
 
 #define ensure(Pred, Msg) ensure_ex((Pred), (Msg), __FILE__, __LINE__)
@@ -492,7 +494,6 @@ struct Arena {
 	// Reset arena, marking all allocations as free. This also ensures that there are not dangling regions.
 	void reset();
 };
-
 
 // Initialize an arena from a buffer
 Arena arena_from_buffer(Slice<u8> buf);
@@ -870,6 +871,21 @@ attribute_format(2, 3)
 String arena_printf(Arena* arena, char const* fmt, ...);
 
 //// Spinlock
+
+// RAII wrapper for auto (un)locking, serving as a critical region marker
+template<class Mutex>
+struct LockGuard {
+	Mutex* _mutex;
+
+	explicit LockGuard(Mutex* l) : _mutex{l} {
+		_mutex->lock();
+	}
+
+	~LockGuard(){
+		_mutex->unlock();
+	}
+};
+
 struct Spinlock {
 	Atomic<bool> _state{0};
 
@@ -878,6 +894,11 @@ struct Spinlock {
 	void unlock();
 
 	bool try_lock();
+
+	[[nodiscard]]
+	auto guard(){
+		return LockGuard<Spinlock>(this);
+	}
 };
 
 //// SPSC queue
