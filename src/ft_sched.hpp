@@ -3,7 +3,7 @@
 //// Compiler intrinsics
 
 #if defined(__clang__) || defined(__GNUC__)
-	// Cause a full memory clobber, this emits no CPU instructions but prevents the compiler from doing certain loads
+	// Cause a full memory clobber, this emits no CPU instructions but prevents the compiler from doing optimizing away certain loads
 	#define COMPILER_MEMORY_BARRIER() asm volatile("" : : : "memory")
 #else
 	#error "Unsupported compiler, need to have a COMPILER_MEMORY_BARRIER macro"
