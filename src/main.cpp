@@ -49,8 +49,6 @@ struct DeadlineSlot {
 	TimeTick last_tick;
 	Duration limit;
 	RawTask* task;
-	DeadlineSlot* _next;
-	DeadlineSlot* _prev;
 
 	void reset(){
 		last_tick = tick_now();
@@ -59,115 +57,93 @@ struct DeadlineSlot {
 
 struct DeadlineWatcher {
 	Slice<DeadlineSlot> slots;
-	DeadlineSlot* check_list_head;
-	DeadlineSlot* free_list_head;
 	Spinlock _lock{};
+
+
+	auto lock_guard(){
+		return _lock.guard();
+	}
 
 	[[nodiscard]]
 	DeadlineSlot* add(RawTask* task, Duration limit){
 		auto guard = _lock.guard();
-		if(!free_list_head){
-			return 0;
+
+		DeadlineSlot* free_slot = nullptr;
+
+		for(auto& slot : slots){
+			if(slot.task == nullptr){
+				free_slot = &slot;
+			}
 		}
 
-		ensure(free_list_head->_prev == nullptr, "Invalid list state");
-
-		auto node = free_list_head;
-
-		// Pop head
-		free_list_head = node->_next;
-		if(free_list_head){
-			free_list_head->_prev = nullptr;
+		if(free_slot){
+			free_slot->task = task;
+			free_slot->limit = limit;
 		}
 
-		// Push head
-		node->_next = check_list_head;
-		if(check_list_head){
-			check_list_head->_prev = node;
-		}
-		check_list_head = node;
+		return free_slot;
+	}
 
-		node->limit = limit;
-		node->last_tick = tick_now();
-		node->task = task;
+	void _remove_no_lock(DeadlineSlot* node){
+		if(!node){ return; }
+		ensure(node >= slots.data && node < (slots.data + slots.len), "invalid slot");
 
-		return node;
+		node->task = nullptr;
+		node->limit = {0};
 	}
 
 	void remove(DeadlineSlot* node){
-		ensure(node >= slots.data && node < (slots.data + slots.len), "invalid slot");
-
-		auto guard = _lock.guard();
-
-		// Re-link siblings, if any
-		auto next = node->_next;
-		auto prev = node->_prev;
-
-		if(next){
-			next->_prev = node->_prev;
-		}
-		if(prev){
-			prev->_next = node->_next;
-		}
-
-		// Re-insert into free list
-		node->_next = free_list_head;
-		if(free_list_head){
-			free_list_head->_prev = node;
-		}
-		node->_prev = nullptr;
+		auto g = _lock.guard();
+		_remove_no_lock(node);
 	}
 
 	void clear(){
 		auto guard = _lock.guard();
-
 		mem_zero(slots.data, slots.len * sizeof(*slots.data));
-
-		auto n = isize(slots.len);
-
-		for(isize i = 0; i < n; i += 1){
-			DeadlineSlot* prev = nullptr;
-			DeadlineSlot* next = nullptr;
-
-			if(i > 0){
-				prev = &slots.data[i - 1];
-			}
-			if(i < n - 1){
-				next = &slots.data[i + 1];
-			}
-
-			slots[i]._prev = prev;
-			slots[i]._next = next;
-		}
-		check_list_head = nullptr;
-		free_list_head = slots.data;
 	}
 
+	// Scan for deadline violations and remove Done tasks
 	void scan(){
 		auto guard = _lock.guard();
 
 		auto now = tick_now();
-		for(auto cur = check_list_head; cur != nullptr; cur = cur->_next){
-			if(cur->task->status() == TaskStatus_Done){
-				remove(cur);
+		for(auto& slot : slots){
+			if(slot.task->status() == TaskStatus_Done){
+				_remove_no_lock(&slot);
 				continue;
 			}
-			else {
-				if(tick_diff(now, cur->last_tick) > cur->limit){
-					u8 buf[80];
-					auto msg =buffer_printf(Slice<u8>{&buf[0], sizeof(buf)}, "expired deadline on task %p", cur->task);
-					panic(msg.data);
-				}
+
+			if(tick_diff(now, slot.last_tick) > slot.limit){
+				u8 buf[80];
+				auto msg =buffer_printf(Slice<u8>{&buf[0], sizeof(buf)}, "expired deadline on task %p", slot.task);
+				panic(msg.data);
 			}
 		}
 	}
 
 	DeadlineWatcher()
 		: slots{}
-		, check_list_head{nullptr}
-		, free_list_head{nullptr}
 		, _lock{}
-		{}
+	{}
+	
+
+	void display(){
+		printf("Free: ");
+		for(auto const& slot : slots){
+			if(!slot.task){
+				printf(" . ");
+			}
+		}
+		printf("\n");
+
+		printf("Check: ");
+		for(auto const& slot : slots){
+			if(slot.task){
+				printf("%d ", (int)slot.limit.to_milli());
+			}
+		}
+		printf("\n");
+	}
 };
 
 void init_deadline_watcher(DeadlineWatcher* w, Slice<DeadlineSlot> slots){
@@ -206,6 +182,8 @@ void entrypoint(){
 
 	t->run();
 	t->join();
+
+	auto watcher = make_deadline_watcher(&main_arena, 10);
 }
 
 //// ---------------------------------------------
@@ -220,7 +198,6 @@ int main()
 
 #include "base.cpp"
 #include "ft_sched.cpp"
-
 
 //// Software watchdog timer
 // Atomic<TimeTick> watchdog_last_tick = 0;

@@ -886,8 +886,18 @@ struct LockGuard {
 		_mutex->lock();
 	}
 
+	LockGuard() = delete;
+
+	LockGuard(LockGuard const&) = delete;
+
+	LockGuard(LockGuard && g) {
+		_mutex = exchange(g->_mutex, nullptr);
+	}
+
 	~LockGuard(){
-		_mutex->unlock();
+		if(_mutex){
+			_mutex->unlock();
+		}
 	}
 };
 
