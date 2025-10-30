@@ -64,12 +64,55 @@ Option<T> consensus(T&& a, T&& b, T&& c, Func&& f){
 	return {};
 }
 
-template<typename T>
-struct Reexec_Task {
-	RawTask _task{};
-	Option<T> results[3];
-	Atomic<u8> execution_counter{0};
+template<typename Output, Callable<Output> TaskFunc>
+struct ReexecTask {
+	RawTask _task;
+	TaskFunc _func;
+	Option<Output> results[3];
+	Atomic<u8> execution_counter;
+
+	static void _task_wrapper(RawTask* t){
+		auto self = (ReexecTask<Output, TaskFunc>*)t->args;
+		auto n = execution_counter.load() - 1;
+		self->_results[n] = Output{ self->_func() };
+	}
+
+	void run(){
+		execution_counter.fetch_add(1);
+	}
+
+	Option<T> result() {
+		unimplemented();
+	}
+
+	TaskStatus status() const {
+		return _task.status();
+	}
+
+	void cancel(){
+		unimplemented();
+	}
+
+	void join(){
+		_task.join();
+	}
+
+	ReexecTask(TaskFunc&& f)
+		: _task{}
+		, _func{forward<TaskFunc>(f)}
+		, results{}
+		, execution_counter{0}
+	{}
 };
+
+template<typename F>
+auto make_reexec_task(Arena* a, F&& func){
+	auto t = make<ReexecTask<decltype(func()), F/*, decltype(_cancellation_nop)*/>>(a, forward<F>(func));
+	init_raw_task(&t->_task, a, t->_task_wrapper, t);
+	// t->_task.on_cancel = t->_task_cancel_wrapper;
+	return t;
+}
+
 
 Arena main_arena;
 constexpr usize main_arena_size = 4096;
@@ -79,7 +122,7 @@ attribute_force_inline static inline
 void entrypoint(){
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
 
-	auto t = make_basic_task(&main_arena, [](){
+	auto t = make_reexec_task(&main_arena, [](){
 		printf("Hello\n");
 		sleep_for(Duration::from_milli(500));
 		return Unit{};

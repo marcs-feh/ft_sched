@@ -310,9 +310,6 @@ struct Option {
 	}
 };
 
-template<>
-struct Option<void> : Option<Unit> {};
-
 //// C++ Iterator insanity
 namespace detail {
 template<typename T>
