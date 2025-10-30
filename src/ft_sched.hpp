@@ -89,6 +89,7 @@ enum TaskStatus : u8 {
 	TaskStatus_Initialized = 1,
 	TaskStatus_Started = 2,
 	TaskStatus_Done = 3,
+	TaskStatus_Cancelled = 4,
 
 	TaskStatus_Fault, // Or anthing above
 };
@@ -98,6 +99,7 @@ concept Task = requires(Impl impl){
 	{ impl.run() } -> SameAs<void>;
 	{ impl.result() } -> SameAs<Option<T>>;
 	{ impl.status() } -> SameAs<TaskStatus>;
+	{ impl.cancel() } -> SameAs<void>;
 	{ impl.join() } -> SameAs<void>;
 	// { impl.fault() } -> SameAs<void>;
 };
@@ -111,12 +113,17 @@ struct RawTaskPlatformSpecificData {
 	uintptr data[2];
 };
 
+using TaskCancelCallback = void (*)(RawTask* self);
+
 struct RawTask {
 	RawTaskFunc func = nullptr;
 	Arena* arena = nullptr;
 	void* args = nullptr;
 	u32 args_size;
 	Atomic<TaskStatus> _status = TaskStatus_Initialized;
+
+	// Optional callback to unlock mutexes or release any additional resource after killing the thread
+	TaskCancelCallback on_cancel = nullptr;
 
 	RawTaskPlatformSpecificData _specific{};
 
@@ -136,31 +143,46 @@ struct RawTask {
 		_join_and_deinit_specifics();
 	}
 
+	void cancel(){
+		_cancel_and_deinit_specifics();
+		if(on_cancel)
+			on_cancel(this);
+	}
+
 	~RawTask(){}
 
 	void _init_specifics_and_run();
 	void _join_and_deinit_specifics();
+	void _cancel_and_deinit_specifics();
 };
 
 void init_raw_task(RawTask* task, Arena* a, RawTaskFunc func, void* args);
 
 RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args);
 
-
-template<typename F, typename Output>
-concept Returns = requires(F f){
-	{ f() } -> SameAs<Output>;
+template<typename F, typename Output, typename ... Args>
+concept Callable = requires(F f, Args... args){
+	{ f(args...) } -> SameAs<Output>;
 };
 
-template<typename Output, Returns<Output> TaskFunc>
+extern "C" int printf(cstring fmt, ...);
+constexpr inline auto _cancellation_nop = [](){ printf("BYEEEE\n");/* Nothing */ };
+
+template<typename Output, Callable<Output> TaskFunc, Callable<void> OnCancel>
 struct BasicTask {
 	RawTask _task;
 	TaskFunc _func;
+	OnCancel _on_cancel;
 	Option<Output> _result;
 
-	static void _simple_task_wrapper(RawTask* t){
-		auto self = (BasicTask<Output, TaskFunc>*)t->args;
+	static void _basic_task_wrapper(RawTask* t){
+		auto self = (BasicTask<Output, TaskFunc, OnCancel>*)t->args;
 		self->_result = Output{ self->_func() };
+	}
+
+	static void _basic_task_cancel_wrapper(RawTask* t){
+		auto self = (BasicTask<Output, TaskFunc, OnCancel>*)t->args;
+		self->_on_cancel();
 	}
 
 	void run(){
@@ -188,19 +210,44 @@ struct BasicTask {
 		_task.join();
 	}
 
+	void cancel(){
+		_task.cancel();
+
+		// NOTE: Mainly for safety, ensure that whatever was here is zeroed,
+		// this can lead to edge case leaks when the result is partially
+		// initialized
+		mem_zero(&_result, sizeof(_result));
+	}
+
 	explicit BasicTask(TaskFunc f)
 		: _task{}
-		, _func{f} {}
+		, _func{f}
+		, _on_cancel{_cancellation_nop} {}
+
+	explicit BasicTask(TaskFunc f, OnCancel c)
+		: _task{}
+		, _func{f}
+		, _on_cancel{c}
+	{}
 };
 
 template<typename F>
 auto make_basic_task(Arena* a, F&& func){
-	auto t = make<BasicTask<decltype(func()), F>>(a, forward<F>(func));
+	auto t = make<BasicTask<decltype(func()), F, decltype(_cancellation_nop)>>(a, forward<F>(func));
 
-	init_raw_task(&t->_task, a, t->_simple_task_wrapper, t);
+	init_raw_task(&t->_task, a, t->_basic_task_wrapper, t);
+	t->_task.on_cancel = t->_basic_task_cancel_wrapper;
+
 	return t;
 }
 
+template<typename F, Callable<void> C>
+auto make_basic_task(Arena* a, F&& func, C&& cancel){
+	auto t = make<BasicTask<decltype(func()), F, C>>(a, forward<F>(func), forward<C>(cancel));
+
+	init_raw_task(&t->_task, a, t->_basic_task_wrapper, t);
+	t->_task.on_cancel = t->_basic_task_cancel_wrapper;
+}
 
 struct TMR_Task {
 	Arena* arena = nullptr;

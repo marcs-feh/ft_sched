@@ -39,11 +39,37 @@ TimeTick start = 0;
 void somebody(RawTask* t){
 	for(int i = 0;;i++){
 		printf("Hi %d\r\n", i);
-		// sleep_for(Duration::from_milli(200));
 	}
-//	sleep_for(Duration::from_milli(125));
-//	printf("Hello from task %p, it's been: %td us\n", t, tick_diff(tick_now(), start).to_micro());
 }
+
+template<typename Func, typename T>
+concept ConsensusFunc = requires(Func cons, T const& x) {
+	{ cons(x, x, x) } -> SameAs<bool>;
+};
+
+template<typename T, ConsensusFunc<T> Func>
+Option<T> consensus(T&& a, T&& b, T&& c, Func&& f){
+	auto ab = f(a, b);
+	auto ac = f(a, c);
+	auto bc = f(b, c);
+
+	if(ab)
+		return {forward<T>(a)};
+	if(ac)
+		return {forward<T>(a)};
+	if(bc)
+		return {forward<T>(b)};
+
+	// No consensus, uh oh!
+	return {};
+}
+
+template<typename T>
+struct Reexec_Task {
+	RawTask _task{};
+	Option<T> results[3];
+	u8 execution_counter{0};
+};
 
 Arena main_arena;
 constexpr usize main_arena_size = 4096;
@@ -52,25 +78,40 @@ u8 main_arena_memory[main_arena_size];
 attribute_force_inline static inline
 void entrypoint(){
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
-	printf("ENTRYPOINT\r\n");
-	auto task = make_raw_task(&main_arena, somebody, nullptr);
-	printf("Created task: %p\r\n", task);
 
-	printf("Running task: %p\r\n", task);
-	task->run();
+	auto t = make_basic_task(&main_arena, [](){
+		printf("Hello\n");
+		sleep_for(Duration::from_milli(500));
+		return Unit{};
+	});
+
+	t->run();
+	t->cancel();
+}
+
+Atomic<TimeTick> watchdog_last_tick = 0;
+
+void watchdog_timer_func(RawTask*){
+	const Duration limit = Duration::from_milli(500);
+	watchdog_last_tick = tick_now();
 
 	while(1){
-		printf("Main\r\n");
-	}
-//	auto t = make_basic_task(&main_arena, [](){
-//		print_info();
-//		return i32(69);
-//	});
-//
-//	t->run();
+		auto now = tick_now();
+		auto elapsed = tick_diff(now, watchdog_last_tick.load(memory_order_relaxed));
 
-	// t->join();
+		if(elapsed > limit){
+			fprintf(stderr, "[WD] Failed! limit=%tdms elapsed=%tdms\n", limit.to_milli(), elapsed.to_milli());
+			panic("Watchdog fail.");
+		}
+		sleep_for(Duration::from_second(0));
+	}
 }
+
+void reset_watchdog(){
+	watchdog_last_tick.store(tick_now(), memory_order_relaxed);
+}
+
+
 
 //// ---------------------------------------------
 #if defined(FT_SCHED_NO_MAIN)
@@ -85,26 +126,3 @@ int main()
 #include "base.cpp"
 #include "ft_sched.cpp"
 
-//// Software watchdog timer
-// Atomic<TimeTick> watchdog_last_tick = 0;
-
-// void watchdog_timer_func(RawTask*){
-// 	const Duration limit = Duration::from_milli(500);
-// 	watchdog_last_tick = tick_now();
-
-// 	while(1){
-// 		auto now = tick_now();
-// 		auto elapsed = tick_diff(now, watchdog_last_tick.load(memory_order_relaxed));
-
-// 		if(elapsed > limit){
-// 			fprintf(stderr, "[WD] Failed! limit=%tdms elapsed=%tdms\n", limit.to_milli(), elapsed.to_milli());
-// 			panic("Watchdog fail.");
-// 		}
-// 		sleep_for(Duration::from_second(0));
-// 	}
-// }
-
-// void reset_watchdog(){
-// 	watchdog_last_tick.store(tick_now(), memory_order_relaxed);
-// }
-////-----------------------

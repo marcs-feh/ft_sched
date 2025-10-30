@@ -59,10 +59,11 @@ void RawTask::_init_specifics_and_run(){
 }
 
 void RawTask::_join_and_deinit_specifics(){
-//	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
-//	auto status = this->_status.load(memory_order_relaxed);
-//
-
+	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
+	auto status = this->_status.load(memory_order_relaxed);
+	while(status != TaskStatus_Fault && status != TaskStatus_Done){
+		osDelay(0); // TODO: Is this actually correct?
+	}
 }
 
 void sleep_for(Duration d){

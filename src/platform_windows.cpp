@@ -47,12 +47,21 @@ void RawTask::_init_specifics_and_run(){
 }
 
 void RawTask::_join_and_deinit_specifics(){
+	ensure(this->_status.load() != TaskStatus_Cancelled, "Cannot join cancelled task");
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 	DWORD ret = WaitForSingleObject(specific->handle, INFINITE);
 	ensure(ret != WAIT_FAILED, "failed to join");
 
 	auto status = this->_status.load();
 	ensure(status == TaskStatus_Fault || status == TaskStatus_Done, "Invalid task status");
+	CloseHandle(specific->handle);
+}
+
+void RawTask::_cancel_and_deinit_specifics(){
+	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
+	this->_status.store(TaskStatus_Cancelled);
+	auto terminated = TerminateThread(specific->handle, 0) != 0;
+	ensure(terminated, "Failed to kill thread");
 	CloseHandle(specific->handle);
 }
 
