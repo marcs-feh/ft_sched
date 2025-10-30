@@ -68,7 +68,7 @@ template<typename T>
 struct Reexec_Task {
 	RawTask _task{};
 	Option<T> results[3];
-	u8 execution_counter{0};
+	Atomic<u8> execution_counter{0};
 };
 
 Arena main_arena;
@@ -110,8 +110,6 @@ void watchdog_timer_func(RawTask*){
 void reset_watchdog(){
 	watchdog_last_tick.store(tick_now(), memory_order_relaxed);
 }
-
-
 
 //// ---------------------------------------------
 #if defined(FT_SCHED_NO_MAIN)
