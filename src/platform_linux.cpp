@@ -59,6 +59,16 @@ void RawTask::_join_and_deinit_specifics(){
 	ensure(status == TaskStatus_Fault || status == TaskStatus_Done, "Invalid task status");
 }
 
+void RawTask::_cancel_and_deinit_specifics(){
+	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
+
+	if(_status == TaskStatus_Started){
+		pthread_cancel(specific->handle);
+	}
+
+	_status.store(TaskStatus_Fault);
+}
+
 TimeTick tick_now(){
 	struct timespec tspec = {};
 	if(clock_gettime(CLOCK_MONOTONIC_RAW, &tspec) < 0){

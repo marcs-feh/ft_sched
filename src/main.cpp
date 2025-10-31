@@ -69,12 +69,42 @@ Option<T> consensus(T&& a, T&& b, T&& c, Func&& f){
 // capture or explicitly are thread safe and do not interfere.
 template<typename Output, Callable<Output> TaskFunc, Callable<void> OnCancel>
 struct TMR_Task {
-	RawTask _tasks[3];
-	TaskFunc _funcs[3]; // NOTE: By tripling the functions themselves we increase redundancy
+	struct SubTask {
+		RawTask task;
+		TaskFunc func;
+		Option<Output> result;
+		DeadlineSlot* slot = nullptr;
+	};
+
+	Array<SubTask, 3> _children;
 	DeadlineWatcher* watcher;
 
+	Duration deadline;
+
+	struct Context {
+		TMR_Task* self;
+		DeadlineSlot* slot;
+	};
+
+	static void _task_wrapper(void* arg){
+		auto sub_task = (SubTask*)arg;
+		if(sub_task->slot){
+			sub_task->slot.reset();
+		}
+
+		sub_task->result = sub_task->func();
+
+		if(sub_task->slot){
+			sub_task->slot.reset();
+		}
+	}
+
 	void run(){
-		unimplemented();
+		for(int i = 0; i < 3; i ++){
+			if(watcher){
+				_children[i].slot = watcher->add(&_children[i], deadline);
+			}
+		}
 	}
 
 	void join(){
@@ -86,9 +116,9 @@ struct TMR_Task {
 	}
 
 	TMR_Task(TaskFunc&& f)
-		: _tasks{}
-		, _funcs{f, f, f}
-		, watcher{nullptrr}
+		: _children{{.func = f}, {.func = f}, {.func = f}}
+		, watcher{nullptr}
+		, deadline{0}
 	{}
 };
 
@@ -102,12 +132,14 @@ void entrypoint(){
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
 
 	auto t = make_basic_task(&main_arena, [](){
-		printf("Hello\n");
+		printf("Begin\n");
 		sleep_for(Duration::from_milli(500));
+		printf("End\n");
 		return Unit{};
 	});
 
 	t->run();
+	sleep_for(Duration::from_milli(900));
 	t->cancel();
 }
 
