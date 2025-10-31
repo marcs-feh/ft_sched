@@ -371,7 +371,7 @@ struct DeadlineWatcher {
 	void clear();
 
 	// Scan for deadline violations and remove Done tasks
-	void scan();
+	bool scan();
 
 	DeadlineWatcher()
 		: slots{}

@@ -38,23 +38,27 @@ void DeadlineWatcher::clear(){
 	mem_zero(slots.data, slots.len * sizeof(*slots.data));
 }
 
-	// Scan for deadline violations and remove Done tasks
-void DeadlineWatcher::scan(){
+// Scan for deadline violations and remove Done tasks
+bool DeadlineWatcher::scan(){
 	auto guard = _lock.guard();
 
 	auto now = tick_now();
 	for(auto& slot : slots){
+		if(!slot.task){
+			continue;
+	 	}
+
 		if(slot.task->status() == TaskStatus_Done){
 			_remove_no_lock(&slot);
 			continue;
 		}
 
 		if(tick_diff(now, slot.last_tick) > slot.limit){
-			u8 buf[80];
-			auto msg =buffer_printf(Slice<u8>{&buf[0], sizeof(buf)}, "expired deadline on task %p", slot.task);
-			panic(msg.data);
+			return false;
 		}
 	}
+
+	return true;
 }
 
 void init_deadline_watcher(DeadlineWatcher* w, Slice<DeadlineSlot> slots){

@@ -6,6 +6,40 @@
 
 extern "C" int puts(char const*);
 
+namespace swdg {
+static Atomic<TimeTick> last_tick = 0;
+
+static RawTask task;
+
+static Duration limit = {0};
+
+void watchdog_timer_func(RawTask*){
+	last_tick = tick_now();
+
+	while(1){
+		auto now = tick_now();
+		auto elapsed = tick_diff(now, last_tick.load(memory_order_relaxed));
+
+		if(elapsed > limit){
+			fprintf(stderr, "[WD] Failed! limit=%tdms elapsed=%tdms\n", limit.to_milli(), elapsed.to_milli());
+			panic("Watchdog fail.");
+		}
+		sleep_for(Duration::from_milli(1));
+	}
+}
+
+void reset_watchdog(){
+	// printf("Reset WDG\n"); fflush(stdout);
+	last_tick.store(tick_now(), memory_order_relaxed);
+}
+
+void init(Duration n){
+	limit = n;
+	init_raw_task(&task, nullptr, watchdog_timer_func, nullptr);
+	task.run();
+}
+}
+
 template<class T>
 void print_list(List<T> const& list, char const* elem_fmt){
 	printf("len: %td cap: %td [ ", list.len, list.cap);
@@ -122,6 +156,16 @@ struct TMR_Task {
 	{}
 };
 
+template<typename F>
+auto make_tmr_task(Arena* a, DeadlineWatcher* w, F&& func){
+	auto t = make<TMR_Task<decltype(func()), F, decltype(_cancellation_nop)>>(a, forward<F>(func));
+
+	for(int i = 0; i < 3; i++){
+		init_raw_task(&t->_children.task[i], a, t->_task_wrapper, t);
+	}
+
+	return t;
+}
 
 Arena main_arena;
 constexpr usize main_arena_size = 4096;
@@ -129,41 +173,41 @@ u8 main_arena_memory[main_arena_size];
 
 attribute_force_inline static inline
 void entrypoint(){
+	swdg::init(Duration::from_second(10));
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
+
+	DeadlineWatcher* watcher = make_deadline_watcher(&main_arena, 32);
+
+	auto watcher_task = make_basic_task(&main_arena, [watcher](){
+		while(true){
+			fflush(stdout);
+			printf("Scan: %d\n", watcher->scan());
+
+
+				swdg::reset_watchdog();
+			// if(watcher->scan()){
+			// 	printf("Check\n");
+			// }
+			sleep_for(Duration::from_milli(5));
+		}
+
+		return Unit{};
+	});
+
+	watcher_task->run();
 
 	auto t = make_basic_task(&main_arena, [](){
 		printf("Begin\n");
-		sleep_for(Duration::from_milli(500));
 		printf("End\n");
 		return Unit{};
 	});
 
 	t->run();
-	sleep_for(Duration::from_milli(900));
-	t->cancel();
+	t->join();
+
+	watcher_task->join();
 }
 
-Atomic<TimeTick> watchdog_last_tick = 0;
-
-void watchdog_timer_func(RawTask*){
-	const Duration limit = Duration::from_milli(500);
-	watchdog_last_tick = tick_now();
-
-	while(1){
-		auto now = tick_now();
-		auto elapsed = tick_diff(now, watchdog_last_tick.load(memory_order_relaxed));
-
-		if(elapsed > limit){
-			fprintf(stderr, "[WD] Failed! limit=%tdms elapsed=%tdms\n", limit.to_milli(), elapsed.to_milli());
-			panic("Watchdog fail.");
-		}
-		sleep_for(Duration::from_second(0));
-	}
-}
-
-void reset_watchdog(){
-	watchdog_last_tick.store(tick_now(), memory_order_relaxed);
-}
 
 //// ---------------------------------------------
 #if defined(FT_SCHED_NO_MAIN)

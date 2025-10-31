@@ -46,7 +46,7 @@ function main()
 	local target_name = ('%s/%s'):format(titlecase(build_mode), titlecase(platform))
 	print('Building for ' .. target_name)
 	execute_build(flash_serial)
-	print('Done')
+	print('-- Build done --')
 end
 
 function execute_build(flash_serial)
@@ -101,8 +101,10 @@ function execute_build(flash_serial)
 	end
 
 	if build_mode == 'debug' then
-		cflags[#cflags+1] = '-g3'
+		cflags[#cflags+1] = '-g'
 		cflags[#cflags+1] = '-O0'
+
+		ldflags[#cflags+1] = '-g'
 	elseif build_mode == 'release' then
 		cflags[#cflags+1] = '-Os'
 	end
@@ -116,19 +118,22 @@ function execute_build(flash_serial)
 
 	pcall(function () u.Task:new('mkdir build'):wait() end)
 
-	for _, file in ipairs(sources) do
-		local obj = ('build/%s.o'):format(file)
-		exec:submit('%s %s -c %s -o %s', cc, join_space(cflags), file, obj)
-		objects[#objects+1] = obj
-		print(obj)
-	end
-
-	exec:wait()
 
 	local output = 'build/ft_sched.exe'
 
 	if platform == 'stm32blackpill' then
 		output = 'build/libft_sched.a'
+
+		for _, file in ipairs(sources) do
+			for _, file in ipairs(sources) do
+				local obj = ('build/%s.o'):format(file)
+				exec:submit('%s %s -c %s -o %s', cc, join_space(cflags), join_space(source), output)
+				objects[#objects+1] = obj
+				print(obj)
+			end
+		end
+		exec:wait()
+
 		exec:submit('%s rcs %s %s', ar, output, join_space(objects), join_space(ldflags)):wait()
 		print(output)
 
@@ -144,7 +149,8 @@ function execute_build(flash_serial)
 			exec:submit('st-flash --serial %s --connect-under-reset write stm32/build/stm32.bin 0x08000000', flash_serial)
 		end
 	else
-		exec:submit('%s -o %s %s', cc, output, join_space(objects), join_space(ldflags))
+		exec:submit('%s %s %s -o %s', cc, join_space(cflags), join_space(source), output, join_space(ldflags))
+
 		print(output)
 	end
 

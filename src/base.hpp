@@ -6,14 +6,14 @@
 #elif defined(__clang__) || defined(__GNUC__)
 	#define attribute_force_inline __attribute__((always_inline))
 #else
-	#warning "Could not find force_inline attribute. This may degrade performance"
+	// #warning "Could not find force_inline attribute. This may degrade performance"
 	#define attribute_force_inline
 #endif
 
 #if defined(__clang__) || defined(__GNUC__)
 	#define attribute_format(fmt_pos, args_pos) __attribute__((format (printf, fmt_pos, args_pos)))
 #else
-	#warning "Could not find printf format attribute. This will degrade warning quality"
+	// #warning "Could not find printf format attribute. This will degrade warning quality"
 	#define attribute_format(fmt, args)
 #endif
 
