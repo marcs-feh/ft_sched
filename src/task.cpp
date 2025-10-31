@@ -20,32 +20,32 @@ RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args){
 	return task;
 }
 
-bool init_tmr_task(TMR_Task* task, Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args){
-	auto restore = a->offset;
+// bool init_tmr_task(TMR_Task* task, Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args){
+// 	auto restore = a->offset;
 
-	auto arena0 = a->make_sub(subtask_arena_size);
-	auto arena1 = a->make_sub(subtask_arena_size);
-	auto arena2 = a->make_sub(subtask_arena_size);
+// 	auto arena0 = a->make_sub(subtask_arena_size);
+// 	auto arena1 = a->make_sub(subtask_arena_size);
+// 	auto arena2 = a->make_sub(subtask_arena_size);
 
-	auto arenas_ok = arena0 && arena1 && arena2;
-	if(!arenas_ok){
-		a->offset = restore;
-		return false;
-	}
+// 	auto arenas_ok = arena0 && arena1 && arena2;
+// 	if(!arenas_ok){
+// 		a->offset = restore;
+// 		return false;
+// 	}
 
-	init_raw_task(&task->task0, arena0, func, args);
-	init_raw_task(&task->task1, arena1, func, args);
-	init_raw_task(&task->task2, arena2, func, args);
+// 	init_raw_task(&task->task0, arena0, func, args);
+// 	init_raw_task(&task->task1, arena1, func, args);
+// 	init_raw_task(&task->task2, arena2, func, args);
 
-	return true;
-}
+// 	return true;
+// }
 
-TMR_Task* make_tmr_task(Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args){
-	auto task = make<TMR_Task>(a);
-	if(task == nullptr) { return nullptr; }
+// TMR_Task* make_tmr_task(Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args){
+// 	auto task = make<TMR_Task>(a);
+// 	if(task == nullptr) { return nullptr; }
 
-	if(!init_tmr_task(task, a, subtask_arena_size, func, args)){
-		return nullptr;
-	}
-	return task;
-}
+// 	if(!init_tmr_task(task, a, subtask_arena_size, func, args)){
+// 		return nullptr;
+// 	}
+// 	return task;
+// }

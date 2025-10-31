@@ -89,7 +89,6 @@ enum TaskStatus : u8 {
 	TaskStatus_Initialized = 1,
 	TaskStatus_Started = 2,
 	TaskStatus_Done = 3,
-	TaskStatus_Cancelled = 4,
 
 	TaskStatus_Fault, // Or anthing above
 };
@@ -249,97 +248,97 @@ auto make_basic_task(Arena* a, F&& func, C&& cancel){
 	t->_task.on_cancel = t->_basic_task_cancel_wrapper;
 }
 
-struct TMR_Task {
-	Arena* arena = nullptr;
-	RawTaskFunc func = nullptr;
-	void* args = nullptr;
-	u32 args_size = 0;
+// struct TMR_Task {
+// 	Arena* arena = nullptr;
+// 	RawTaskFunc func = nullptr;
+// 	void* args = nullptr;
+// 	u32 args_size = 0;
 
-	RawTask task0{};
-	RawTask task1{};
-	RawTask task2{};
+// 	RawTask task0{};
+// 	RawTask task1{};
+// 	RawTask task2{};
 
-	void run() {
-		auto init = (task0.status() == TaskStatus_Initialized)
-			&& (task1.status() == TaskStatus_Initialized)
-			&& (task2.status() == TaskStatus_Initialized);
+// 	void run() {
+// 		auto init = (task0.status() == TaskStatus_Initialized)
+// 			&& (task1.status() == TaskStatus_Initialized)
+// 			&& (task2.status() == TaskStatus_Initialized);
 
-		ensure(init, "Sub-tasks are not properly initialized");
+// 		ensure(init, "Sub-tasks are not properly initialized");
 
-		this->task0.run();
-		this->task1.run();
-		this->task2.run();
-	}
+// 		this->task0.run();
+// 		this->task1.run();
+// 		this->task2.run();
+// 	}
 
-	TaskStatus status() {
-		auto status0 = task0.status();
-		auto status1 = task1.status();
-		auto status2 = task2.status();
+// 	TaskStatus status() {
+// 		auto status0 = task0.status();
+// 		auto status1 = task1.status();
+// 		auto status2 = task2.status();
 
-		auto all_done =
-			(status0 == TaskStatus_Done) &&
-			(status1 == TaskStatus_Done) &&
-			(status2 == TaskStatus_Done);
+// 		auto all_done =
+// 			(status0 == TaskStatus_Done) &&
+// 			(status1 == TaskStatus_Done) &&
+// 			(status2 == TaskStatus_Done);
 
-		if(all_done){
-			return TaskStatus_Done;
-		}
+// 		if(all_done){
+// 			return TaskStatus_Done;
+// 		}
 
-		auto faulted =
-			(status0 == TaskStatus_Fault) ||
-			(status1 == TaskStatus_Fault) ||
-			(status2 == TaskStatus_Fault);
+// 		auto faulted =
+// 			(status0 == TaskStatus_Fault) ||
+// 			(status1 == TaskStatus_Fault) ||
+// 			(status2 == TaskStatus_Fault);
 
-		if(faulted){
-			return TaskStatus_Fault;
-		}
+// 		if(faulted){
+// 			return TaskStatus_Fault;
+// 		}
 
-		auto at_least_started =
-			(status0 >= TaskStatus_Started) &&
-			(status1 >= TaskStatus_Started) &&
-			(status2 >= TaskStatus_Started);
+// 		auto at_least_started =
+// 			(status0 >= TaskStatus_Started) &&
+// 			(status1 >= TaskStatus_Started) &&
+// 			(status2 >= TaskStatus_Started);
 
-		if(at_least_started){
-			return TaskStatus_Started;
-		}
+// 		if(at_least_started){
+// 			return TaskStatus_Started;
+// 		}
 
-		auto at_least_initialized =
-			(status0 >= TaskStatus_Initialized) &&
-			(status1 >= TaskStatus_Initialized) &&
-			(status2 >= TaskStatus_Initialized);
+// 		auto at_least_initialized =
+// 			(status0 >= TaskStatus_Initialized) &&
+// 			(status1 >= TaskStatus_Initialized) &&
+// 			(status2 >= TaskStatus_Initialized);
 
-		if(at_least_initialized){
-			return TaskStatus_Initialized;
-		}
+// 		if(at_least_initialized){
+// 			return TaskStatus_Initialized;
+// 		}
 
-		return TaskStatus_Undefined;
-	}
+// 		return TaskStatus_Undefined;
+// 	}
 
-	void fault() {
-		task0.fault();
-		task1.fault();
-		task2.fault();
-	}
+// 	void fault() {
+// 		task0.fault();
+// 		task1.fault();
+// 		task2.fault();
+// 	}
 
-	// TODO: Use a timeout
-	void join() {
-		if(task0.status() != TaskStatus_Fault){
-			task0.join();
-		}
+// 	// TODO: Use a timeout
+// 	void join() {
+// 		if(task0.status() != TaskStatus_Fault){
+// 			task0.join();
+// 		}
 
-		if(task1.status() != TaskStatus_Fault){
-			task1.join();
-		}
+// 		if(task1.status() != TaskStatus_Fault){
+// 			task1.join();
+// 		}
 
-		if(task2.status() != TaskStatus_Fault){
-			task2.join();
-		}
-	}
-};
+// 		if(task2.status() != TaskStatus_Fault){
+// 			task2.join();
+// 		}
+// 	}
+// };
 
-bool init_tmr_task(RawTask* task, Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args, usize args_size);
+// bool init_tmr_task(RawTask* task, Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args, usize args_size);
 
-TMR_Task* make_tmr_task(Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args, usize args_size);
+// TMR_Task* make_tmr_task(Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args, usize args_size);
 
 //// Deadlines
 struct DeadlineSlot {
