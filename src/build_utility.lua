@@ -11,6 +11,7 @@ function Executor:new()
 
 	o.tasks = {}
 	o.running = false
+	o.verbose = false
 
 	return o
 end
@@ -55,7 +56,12 @@ function Task:wait()
 end
 
 function Executor:submit(cmd, ...)
-	local t = Task:new(cmd:format(...))
+	local c = cmd:format(...)
+	local t = Task:new(c)
+
+	if self.verbose then
+		print('-> ' .. c)
+	end
 	self.tasks[#self.tasks+1] = t
 	t:run()
 	return self
@@ -70,7 +76,7 @@ function Executor:wait(verbose)
 		results[#results+1] = {ok, result}
 
 		if not ok then
-			errors[#errors+1] = ('task `%s` has failed: %s'):format(t.cmd, result)
+			errors[#errors+1] = ('task `%s` has failed:\n %s'):format(t.cmd, result)
 		end
 
 		if verbose then

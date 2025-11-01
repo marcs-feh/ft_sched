@@ -10,6 +10,7 @@ function main()
 		:add('generate', 'Generate code before compiling')
 		:add('mode', 'Build mode [debug|release]. Default is debug', true)
 		:add('flash', 'Flash STM32 with provided serial number', true)
+		:add('verbose', 'Print more')
 
 	platform = arg[1]
 	local valid_platforms = {linux = true, windows = true, stm32blackpill = true}
@@ -45,11 +46,13 @@ function main()
 
 	local target_name = ('%s/%s'):format(titlecase(build_mode), titlecase(platform))
 	print('Building for ' .. target_name)
-	execute_build(flash_serial)
-	print('-- Build done --')
+	execute_build(flash_serial, not not flags.verbose)
+	print('Done')
 end
 
-function execute_build(flash_serial)
+C_Builder = {}
+
+function execute_build(flash_serial, verbose)
 	local cc = 'clang++'
 	local cflags = {'-std=c++20', '-fwrapv', '-fno-strict-aliasing', '-fno-rtti', '-fno-exceptions', '-I.'}
 	local wflags = {'-Wall', '-Wextra', '-Werror=return-type'}
@@ -57,6 +60,7 @@ function execute_build(flash_serial)
 	local ar = 'ar'
 
 	local exec = u.Executor:new()
+	exec.verbose = verbose
 
 	local sources = {
 		'main.cpp',
@@ -118,20 +122,17 @@ function execute_build(flash_serial)
 
 	pcall(function () u.Task:new('mkdir build'):wait() end)
 
-
 	local output = 'build/ft_sched.exe'
+
+	for _, file in ipairs(sources) do
+		local obj = ('build/%s.o'):format(file)
+		exec:submit('%s %s -c %s -o %s', cc, join_space(cflags), file, obj)
+		objects[#objects+1] = obj
+	end
+	exec:wait()
 
 	if platform == 'stm32blackpill' then
 		output = 'build/libft_sched.a'
-
-		for _, file in ipairs(sources) do
-			for _, file in ipairs(sources) do
-				local obj = ('build/%s.o'):format(file)
-				exec:submit('%s %s -c %s -o %s', cc, join_space(cflags), join_space(source), output)
-				objects[#objects+1] = obj
-				print(obj)
-			end
-		end
 		exec:wait()
 
 		exec:submit('%s rcs %s %s', ar, output, join_space(objects), join_space(ldflags)):wait()
@@ -149,9 +150,7 @@ function execute_build(flash_serial)
 			exec:submit('st-flash --serial %s --connect-under-reset write stm32/build/stm32.bin 0x08000000', flash_serial)
 		end
 	else
-		exec:submit('%s %s %s -o %s', cc, join_space(cflags), join_space(source), output, join_space(ldflags))
-
-		print(output)
+		exec:submit('%s %s %s -o %s', cc, join_space(cflags), join_space(sources), output, join_space(ldflags))
 	end
 
 	exec:wait()

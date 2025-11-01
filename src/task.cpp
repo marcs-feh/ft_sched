@@ -1,20 +1,28 @@
 #include "ft_sched.hpp"
 
+static Atomic<u32> raw_task_id_counter = 1;
+
+u32 next_raw_task_id(){
+	return raw_task_id_counter.fetch_add(1, memory_order_relaxed);
+}
+
 // TODO: use a sub-arena to avoid ownership issues
-void init_raw_task(RawTask* task, Arena* a, RawTaskFunc func, void* args){
+void init_raw_task(RawTask* task, Arena* a, DeadlineSlot* s, RawTaskFunc func, void* args){
 	ensure(task != nullptr, "Must be non-null");
 
 	task->func = func;
 	task->arena = a;
 	task->_status.store(TaskStatus_Initialized);
 	task->args = args;
+	task->deadline = s;
+	task->id = next_raw_task_id();
 }
 
-RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args){
+RawTask* make_raw_task(Arena* a, DeadlineSlot* s, RawTaskFunc func, void* args){
 	auto task = make<RawTask>(a);
 
 	if(task){
-		init_raw_task(task, a, func, args);
+		init_raw_task(task, a, s, func, args);
 	}
 
 	return task;

@@ -21,8 +21,8 @@ void watchdog_timer_func(RawTask*){
 		auto elapsed = tick_diff(now, last_tick.load(memory_order_relaxed));
 
 		if(elapsed > limit){
-			fprintf(stderr, "[WD] Failed! limit=%tdms elapsed=%tdms\n", limit.to_milli(), elapsed.to_milli());
-			panic("Watchdog fail.");
+			fprintf(stderr, "[swdg] Failed! limit=%tdms elapsed=%tdms\n", limit.to_milli(), elapsed.to_milli());
+			trap();
 		}
 		sleep_for(Duration::from_milli(1));
 	}
@@ -35,7 +35,7 @@ void reset_watchdog(){
 
 void init(Duration n){
 	limit = n;
-	init_raw_task(&task, nullptr, watchdog_timer_func, nullptr);
+	init_raw_task(&task, nullptr, nullptr, watchdog_timer_func, nullptr);
 	task.run();
 }
 }
@@ -98,6 +98,7 @@ Option<T> consensus(T&& a, T&& b, T&& c, Func&& f){
 	return {};
 }
 
+
 // IMPORTANT: The tasks will be concurrently executed, it the caller's
 // responsibility to ensure that whatever arguments were read, either by
 // capture or explicitly are thread safe and do not interfere.
@@ -122,9 +123,6 @@ struct TMR_Task {
 
 	static void _task_wrapper(void* arg){
 		auto sub_task = (SubTask*)arg;
-		if(sub_task->slot){
-			sub_task->slot.reset();
-		}
 
 		sub_task->result = sub_task->func();
 
@@ -136,7 +134,12 @@ struct TMR_Task {
 	void run(){
 		for(int i = 0; i < 3; i ++){
 			if(watcher){
-				_children[i].slot = watcher->add(&_children[i], deadline);
+				auto slot = watcher->add(&_children[i], deadline);
+				_children[i].slot = slot;
+
+				if(slot){
+					slot.reset();
+				}
 			}
 		}
 	}
@@ -171,24 +174,27 @@ Arena main_arena;
 constexpr usize main_arena_size = 4096;
 u8 main_arena_memory[main_arena_size];
 
+Unit hello(TaskContext){
+	return {};
+}
+
 attribute_force_inline static inline
 void entrypoint(){
-	swdg::init(Duration::from_second(10));
+	swdg::init(Duration::from_milli(750));
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
 
 	DeadlineWatcher* watcher = make_deadline_watcher(&main_arena, 32);
 
-	auto watcher_task = make_basic_task(&main_arena, [watcher](){
-		while(true){
+	bool running = true;
+	auto watcher_task = make_basic_task(&main_arena, [watcher, &running](TaskContext){
+		while(running){
 			fflush(stdout);
-			printf("Scan: %d\n", watcher->scan());
 
-
-				swdg::reset_watchdog();
 			// if(watcher->scan()){
-			// 	printf("Check\n");
+			// 	swdg::reset_watchdog();
 			// }
-			sleep_for(Duration::from_milli(5));
+
+			sleep_for(Duration::from_milli(1));
 		}
 
 		return Unit{};
@@ -196,15 +202,20 @@ void entrypoint(){
 
 	watcher_task->run();
 
-	auto t = make_basic_task(&main_arena, [](){
-		printf("Begin\n");
-		printf("End\n");
+	auto t = make_basic_task(&main_arena, [](TaskContext ctx){
+		printf("Begin\n"); fflush(stdout);
+
+		ctx.ensure(2 + 2 == 4, "DAMMIT");
+		sleep_for(Duration::from_milli(1000));
+
+		printf("End\n"); fflush(stdout);
 		return Unit{};
 	});
 
 	t->run();
 	t->join();
 
+	running = false;
 	watcher_task->join();
 }
 

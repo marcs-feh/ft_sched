@@ -53,7 +53,7 @@ void RawTask::_join_and_deinit_specifics(){
 	ensure(ret != WAIT_FAILED, "failed to join");
 
 	auto status = this->_status.load();
-	ensure(status == TaskStatus_Done, "Invalid task status");
+	ensure(status >= TaskStatus_Done, "Invalid task status");
 	CloseHandle(specific->handle);
 }
 

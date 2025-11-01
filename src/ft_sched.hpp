@@ -93,17 +93,20 @@ enum TaskStatus : u8 {
 	TaskStatus_Fault, // Or anthing above
 };
 
-template<typename Impl, typename T>
-concept Task = requires(Impl impl){
-	{ impl.run() } -> SameAs<void>;
-	{ impl.result() } -> SameAs<Option<T>>;
-	{ impl.status() } -> SameAs<TaskStatus>;
-	{ impl.cancel() } -> SameAs<void>;
-	{ impl.join() } -> SameAs<void>;
-	// { impl.fault() } -> SameAs<void>;
+struct RawTask;
+
+struct DeadlineSlot {
+	int value;
+
+	TimeTick last_tick;
+	Duration limit;
+	RawTask* task;
+
+	void reset(){
+		last_tick = tick_now();
+	}
 };
 
-struct RawTask;
 
 // Task object that closely maps to a regular thread
 using RawTaskFunc = void (*)(RawTask* t);
@@ -118,7 +121,9 @@ struct RawTask {
 	RawTaskFunc func = nullptr;
 	Arena* arena = nullptr;
 	void* args = nullptr;
+	DeadlineSlot* deadline = nullptr;
 	u32 args_size;
+	u32 id{};
 	Atomic<TaskStatus> _status = TaskStatus_Initialized;
 
 	// Optional callback to unlock mutexes or release any additional resource after killing the thread
@@ -127,6 +132,7 @@ struct RawTask {
 	RawTaskPlatformSpecificData _specific{};
 
 	void run() {
+		if(deadline) deadline->reset();
 		_init_specifics_and_run();
 	}
 
@@ -155,19 +161,45 @@ struct RawTask {
 	void _cancel_and_deinit_specifics();
 };
 
-void init_raw_task(RawTask* task, Arena* a, RawTaskFunc func, void* args);
+u32 next_raw_task_id();
 
-RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args);
+void init_raw_task(RawTask* task, Arena* a, DeadlineSlot* s, RawTaskFunc func, void* args);
+
+RawTask* make_raw_task(Arena* a, DeadlineSlot* s, RawTaskFunc func, void* args);
+
+template<typename Impl, typename T>
+concept Task = requires(Impl impl){
+	{ impl.run() } -> SameAs<void>;
+	{ impl.result() } -> SameAs<Option<T>>;
+	{ impl.status() } -> SameAs<TaskStatus>;
+	{ impl.cancel() } -> SameAs<void>;
+	{ impl.join() } -> SameAs<void>;
+	{ impl.raw_task() } -> SameAs<RawTask*>;
+};
 
 template<typename F, typename Output, typename ... Args>
 concept Callable = requires(F f, Args... args){
 	{ f(args...) } -> SameAs<Output>;
 };
 
-extern "C" int printf(cstring fmt, ...);
-constexpr inline auto _cancellation_nop = [](){ printf("BYEEEE\n");/* Nothing */ };
+struct TaskContext {
+	RawTask* task{nullptr};
+	DeadlineSlot* deadline{nullptr};
 
-template<typename Output, Callable<Output> TaskFunc, Callable<void> OnCancel>
+	void ensure(bool pred, cstring msg, CALLER_LOCATION){
+		if(!pred){
+			error_printf(caller_location.file_name(), caller_location.line(),
+				"[Task %2d]Assertion failed: %s\r\n",
+				task->id, msg
+			);
+			task->cancel();
+		}
+	}
+};
+
+constexpr inline auto _cancellation_nop = [](TaskContext){ /* Nothing */ };
+
+template<typename Output, Callable<Output, TaskContext> TaskFunc, Callable<void, TaskContext> OnCancel>
 struct BasicTask {
 	RawTask _task;
 	TaskFunc _func;
@@ -176,12 +208,14 @@ struct BasicTask {
 
 	static void _basic_task_wrapper(RawTask* t){
 		auto self = (BasicTask<Output, TaskFunc, OnCancel>*)t->args;
-		self->_result = Output{ self->_func() };
+		auto context = TaskContext { &self->_task, nullptr };
+		self->_result = Output{ self->_func(context) };
 	}
 
 	static void _basic_task_cancel_wrapper(RawTask* t){
 		auto self = (BasicTask<Output, TaskFunc, OnCancel>*)t->args;
-		self->_on_cancel();
+		auto context = TaskContext { &self->_task, nullptr };
+		self->_on_cancel(context);
 	}
 
 	void run(){
@@ -209,6 +243,10 @@ struct BasicTask {
 		_task.join();
 	}
 
+	RawTask* raw_task() {
+		return &_task;
+	}
+
 	void cancel(){
 		_task.cancel();
 
@@ -231,20 +269,20 @@ struct BasicTask {
 };
 
 template<typename F>
-auto make_basic_task(Arena* a, F&& func){
-	auto t = make<BasicTask<decltype(func()), F, decltype(_cancellation_nop)>>(a, forward<F>(func));
+auto make_basic_task(Arena* a, F&& func, DeadlineSlot* deadline = nullptr){
+	auto t = make<BasicTask< decltype(func(TaskContext{})), F, decltype(_cancellation_nop)> >(a, forward<F>(func));
 
-	init_raw_task(&t->_task, a, t->_basic_task_wrapper, t);
+	init_raw_task(&t->_task, a, deadline, t->_basic_task_wrapper, t);
 	t->_task.on_cancel = t->_basic_task_cancel_wrapper;
 
 	return t;
 }
 
 template<typename F, Callable<void> C>
-auto make_basic_task(Arena* a, F&& func, C&& cancel){
-	auto t = make<BasicTask<decltype(func()), F, C>>(a, forward<F>(func), forward<C>(cancel));
+auto make_basic_task(Arena* a, F&& func, C&& cancel, DeadlineSlot* deadline = nullptr){
+	auto t = make<BasicTask<decltype(func(TaskContext{})), F, C>>(a, forward<F>(func), forward<C>(cancel));
 
-	init_raw_task(&t->_task, a, t->_basic_task_wrapper, t);
+	init_raw_task(&t->_task, a, deadline, t->_basic_task_wrapper, t);
 	t->_task.on_cancel = t->_basic_task_cancel_wrapper;
 }
 
@@ -341,18 +379,6 @@ auto make_basic_task(Arena* a, F&& func, C&& cancel){
 // TMR_Task* make_tmr_task(Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args, usize args_size);
 
 //// Deadlines
-struct DeadlineSlot {
-	int value;
-
-	TimeTick last_tick;
-	Duration limit;
-	RawTask* task;
-
-	void reset(){
-		last_tick = tick_now();
-	}
-};
-
 struct DeadlineWatcher {
 	Slice<DeadlineSlot> slots;
 	Spinlock _lock{};
@@ -363,6 +389,11 @@ struct DeadlineWatcher {
 
 	[[nodiscard]]
 	DeadlineSlot* add(RawTask* task, Duration limit);
+
+	template<typename T> [[nodiscard]]
+	DeadlineSlot* add(Task<T> auto&& task, Duration limit){
+		this->add(task.raw_task(), limit);
+	}
 
 	void _remove_no_lock(DeadlineSlot* node);
 

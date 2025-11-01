@@ -21,6 +21,7 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include <atomic>
+#include <source_location>
 
 //// Basic types & Utilities
 using i8 = int8_t;
@@ -98,6 +99,9 @@ using AtomicBool = Atomic<bool>;
 static_assert(AtomicUsize::is_always_lock_free, "Expected usize to be lock-free");
 static_assert(AtomicIsize::is_always_lock_free, "Expected isize to be lock-free");
 static_assert(AtomicBool::is_always_lock_free, "Expected bool to be lock-free");
+
+//// Source location
+#define CALLER_LOCATION std::source_location const& caller_location = std::source_location::current()
 
 //// Type traits
 
@@ -214,6 +218,10 @@ auto make_deferred(F&& f){
 #define defer(STMT) auto DEFER_COUNTER(_defer_expr_) = ::defer_detail::make_deferred([&](){ STMT; })
 
 //// Assertions
+int error_vprintf(char const* filename, int line, char const* fmt, va_list args);
+
+attribute_format(3, 4)
+int error_printf(char const* filename, int line, char const* fmt, ...);
 
 void error_write(cstring msg);
 
@@ -223,11 +231,26 @@ void error_write(cstring msg);
 
 [[noreturn]] void panicf_ex(char const* fmt, cstring file, i32 line, ...);
 
-bool ensure_ex(bool pred, char const* msg, char const* filename, int line);
+void ensure_ex(bool pred, char const* msg, char const* filename, int line);
 
-#define ensure(Pred, Msg) ensure_ex((Pred), (Msg), __FILE__, __LINE__)
-#define panic(Msg) panic_ex((Msg), __FILE__, __LINE__)
-#define unimplemented() panic_ex("Unimplemented", __FILE__, __LINE__)
+static inline
+void ensure(bool pred, char const* msg, CALLER_LOCATION){
+	ensure_ex(pred, msg, caller_location.file_name(), caller_location.line());
+}
+
+static inline
+void panic(char const* msg, CALLER_LOCATION){
+	panic_ex(msg, caller_location.file_name(), caller_location.line());
+}
+
+static inline
+void unimplemented(CALLER_LOCATION){
+	panic_ex("Unimplemented", caller_location.file_name(), caller_location.line());
+}
+
+// #define ensure(Pred, Msg) ensure_ex((Pred), (Msg), __FILE__, __LINE__)
+// #define panic(Msg) panic_ex((Msg), __FILE__, __LINE__)
+// #define unimplemented() panic_ex("Unimplemented", __FILE__, __LINE__)
 
 //// Option
 template<typename T>

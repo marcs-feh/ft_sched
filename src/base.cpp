@@ -13,7 +13,6 @@ usize cstring_len(cstring cs) {
 }
 
 //// Assertions
-static
 int error_vprintf(char const* filename, int line, char const* fmt, va_list args){
 	int n = 0;
 	char buf[128] = {0};
@@ -25,7 +24,6 @@ int error_vprintf(char const* filename, int line, char const* fmt, va_list args)
 	return n;
 }
 
-static
 int error_printf(char const* filename, int line, char const* fmt, ...){
 	int n = 0;
 	va_list args;
@@ -40,12 +38,11 @@ void panic_ex(char const* msg, char const* filename, int line){
 	do { trap(); } while(1);
 }
 
-bool ensure_ex(bool pred, char const* msg, char const* filename, int line){
+void ensure_ex(bool pred, char const* msg, char const* filename, int line){
 	if(!pred){
 		error_printf(filename, line, "Assertion failed: %s", msg);
 		trap();
 	}
-	return pred;
 }
 
 //// Memory
