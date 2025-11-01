@@ -47,12 +47,16 @@ void RawTask::_init_specifics_and_run(){
 }
 
 void RawTask::_join_and_deinit_specifics(){
-	ensure(this->_status.load() != TaskStatus_Fault, "Cannot join faulty task");
+	auto status = this->_status.load();
+	if(status >= TaskStatus_Done){
+		return;
+	}
+
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 	DWORD ret = WaitForSingleObject(specific->handle, INFINITE);
 	ensure(ret != WAIT_FAILED, "failed to join");
 
-	auto status = this->_status.load();
+	status = this->_status.load();
 	ensure(status >= TaskStatus_Done, "Invalid task status");
 	CloseHandle(specific->handle);
 }

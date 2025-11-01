@@ -1,7 +1,7 @@
 #include "ft_sched.hpp"
 
 [[nodiscard]]
-DeadlineSlot* DeadlineWatcher::add(RawTask* task, Duration limit){
+bool DeadlineWatcher::watch(RawTask* task, Duration limit){
 	auto guard = _lock.guard();
 
 	DeadlineSlot* free_slot = nullptr;
@@ -12,12 +12,16 @@ DeadlineSlot* DeadlineWatcher::add(RawTask* task, Duration limit){
 		}
 	}
 
-	if(free_slot){
-		free_slot->task = task;
-		free_slot->limit = limit;
+	if(!free_slot){
+		return false;
 	}
+	
+	free_slot->task = task;
+	free_slot->limit = limit;
+	task->deadline = free_slot;
+	_count.fetch_add(1, memory_order_relaxed);
 
-	return free_slot;
+	return true;
 }
 
 void DeadlineWatcher::_remove_no_lock(DeadlineSlot* node){
@@ -26,6 +30,7 @@ void DeadlineWatcher::_remove_no_lock(DeadlineSlot* node){
 
 	node->task = nullptr;
 	node->limit = {0};
+	_count.fetch_add(-1, memory_order_relaxed);
 }
 
 void DeadlineWatcher::remove(DeadlineSlot* node){
@@ -38,27 +43,33 @@ void DeadlineWatcher::clear(){
 	mem_zero(slots.data, slots.len * sizeof(*slots.data));
 }
 
+extern "C" int printf(cstring, ...);
 // Scan for deadline violations and remove Done tasks
 bool DeadlineWatcher::scan(){
 	auto guard = _lock.guard();
 
 	auto now = tick_now();
+	bool ok = true;
+
 	for(auto& slot : slots){
 		if(!slot.task){
 			continue;
 	 	}
 
-		if(slot.task->status() == TaskStatus_Done){
+	 	auto status = slot.task->status();
+		if(status >= TaskStatus_Done){
 			_remove_no_lock(&slot);
 			continue;
 		}
 
 		if(tick_diff(now, slot.last_tick) > slot.limit){
-			return false;
+			printf("DEADLINE VIOLATION ON TASK %d\n", slot.task->id);
+			slot.task->cancel();
+			ok = false;
 		}
 	}
 
-	return true;
+	return ok;
 }
 
 void init_deadline_watcher(DeadlineWatcher* w, Slice<DeadlineSlot> slots){

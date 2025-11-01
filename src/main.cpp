@@ -35,7 +35,7 @@ void reset_watchdog(){
 
 void init(Duration n){
 	limit = n;
-	init_raw_task(&task, nullptr, nullptr, watchdog_timer_func, nullptr);
+	init_raw_task(&task, nullptr, watchdog_timer_func, nullptr);
 	task.run();
 }
 }
@@ -108,7 +108,6 @@ struct TMR_Task {
 		RawTask task;
 		TaskFunc func;
 		Option<Output> result;
-		DeadlineSlot* slot = nullptr;
 	};
 
 	Array<SubTask, 3> _children;
@@ -134,7 +133,7 @@ struct TMR_Task {
 	void run(){
 		for(int i = 0; i < 3; i ++){
 			if(watcher){
-				auto slot = watcher->add(&_children[i], deadline);
+				auto slot = watcher->watch(&_children[i], deadline);
 				_children[i].slot = slot;
 
 				if(slot){
@@ -180,7 +179,7 @@ Unit hello(TaskContext){
 
 attribute_force_inline static inline
 void entrypoint(){
-	swdg::init(Duration::from_milli(750));
+	swdg::init(Duration::from_milli(100));
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
 
 	DeadlineWatcher* watcher = make_deadline_watcher(&main_arena, 32);
@@ -188,35 +187,52 @@ void entrypoint(){
 	bool running = true;
 	auto watcher_task = make_basic_task(&main_arena, [watcher, &running](TaskContext){
 		while(running){
-			fflush(stdout);
-
-			// if(watcher->scan()){
-			// 	swdg::reset_watchdog();
-			// }
+			if(watcher->scan()){
+				swdg::reset_watchdog();
+			}
 
 			sleep_for(Duration::from_milli(1));
 		}
 
 		return Unit{};
 	});
-
 	watcher_task->run();
 
-	auto t = make_basic_task(&main_arena, [](TaskContext ctx){
-		printf("Begin\n"); fflush(stdout);
-
-		ctx.ensure(2 + 2 == 4, "DAMMIT");
-		sleep_for(Duration::from_milli(1000));
-
-		printf("End\n"); fflush(stdout);
+	auto t0 = make_basic_task(&main_arena, [](TaskContext ctx){
+		printf("Begin %d\n", ctx.task->id); fflush(stdout); 
+		sleep_for(Duration::from_milli(200));
+		printf("End %d\n", ctx.task->id); fflush(stdout);
 		return Unit{};
 	});
+	watcher->watch(t0->raw_task(), Duration::from_milli(300));
+	t0->run();
 
-	t->run();
-	t->join();
+	auto t1 = make_basic_task(&main_arena, [](TaskContext ctx){
+		printf("Begin %d\n", ctx.task->id); fflush(stdout); 
+		sleep_for(Duration::from_milli(300));
+		printf("End %d\n", ctx.task->id); fflush(stdout);
+		return Unit{};
+	});
+	watcher->watch(t1->raw_task(), Duration::from_milli(100));
+	t1->run();
 
-	running = false;
-	watcher_task->join();
+	auto t2 = make_basic_task(&main_arena, [](TaskContext ctx){
+		printf("Begin %d\n", ctx.task->id); fflush(stdout); 
+		sleep_for(Duration::from_milli(150));
+		printf("End %d\n", ctx.task->id); fflush(stdout);
+		return Unit{};
+	});
+	watcher->watch(t1->raw_task(), Duration::from_milli(300));
+	t2->run();
+	
+	// running = false;
+
+	t0->join();
+	t1->join();
+	t2->join();
+
+	printf("Waiting...\n");
+	while(watcher->count());
 }
 
 

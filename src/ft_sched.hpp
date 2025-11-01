@@ -163,9 +163,9 @@ struct RawTask {
 
 u32 next_raw_task_id();
 
-void init_raw_task(RawTask* task, Arena* a, DeadlineSlot* s, RawTaskFunc func, void* args);
+void init_raw_task(RawTask* task, Arena* a, RawTaskFunc func, void* args);
 
-RawTask* make_raw_task(Arena* a, DeadlineSlot* s, RawTaskFunc func, void* args);
+RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args);
 
 template<typename Impl, typename T>
 concept Task = requires(Impl impl){
@@ -269,10 +269,10 @@ struct BasicTask {
 };
 
 template<typename F>
-auto make_basic_task(Arena* a, F&& func, DeadlineSlot* deadline = nullptr){
+auto make_basic_task(Arena* a, F&& func){
 	auto t = make<BasicTask< decltype(func(TaskContext{})), F, decltype(_cancellation_nop)> >(a, forward<F>(func));
 
-	init_raw_task(&t->_task, a, deadline, t->_basic_task_wrapper, t);
+	init_raw_task(&t->_task, a, t->_basic_task_wrapper, t);
 	t->_task.on_cancel = t->_basic_task_cancel_wrapper;
 
 	return t;
@@ -282,7 +282,7 @@ template<typename F, Callable<void> C>
 auto make_basic_task(Arena* a, F&& func, C&& cancel, DeadlineSlot* deadline = nullptr){
 	auto t = make<BasicTask<decltype(func(TaskContext{})), F, C>>(a, forward<F>(func), forward<C>(cancel));
 
-	init_raw_task(&t->_task, a, deadline, t->_basic_task_wrapper, t);
+	init_raw_task(&t->_task, a, t->_basic_task_wrapper, t);
 	t->_task.on_cancel = t->_basic_task_cancel_wrapper;
 }
 
@@ -382,18 +382,18 @@ auto make_basic_task(Arena* a, F&& func, C&& cancel, DeadlineSlot* deadline = nu
 struct DeadlineWatcher {
 	Slice<DeadlineSlot> slots;
 	Spinlock _lock{};
+	Atomic<u32> _count;
 
 	auto lock_guard(){
 		return _lock.guard();
 	}
 
-	[[nodiscard]]
-	DeadlineSlot* add(RawTask* task, Duration limit);
-
-	template<typename T> [[nodiscard]]
-	DeadlineSlot* add(Task<T> auto&& task, Duration limit){
-		this->add(task.raw_task(), limit);
+	usize count() const {
+		return _count.load(memory_order_relaxed);
 	}
+
+	[[nodiscard]]
+	bool watch(RawTask* task, Duration limit);
 
 	void _remove_no_lock(DeadlineSlot* node);
 
