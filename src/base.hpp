@@ -888,8 +888,10 @@ RuneDecoded rune_decode(u8 const* buf, u32 buflen);
 
 cstring clone_to_cstring(String s, Arena* a);
 
+[[nodiscard]]
 String buffer_vprintf(Slice<u8> buf, char const* fmt, va_list args);
 
+[[nodiscard]]
 attribute_format(2, 3)
 String buffer_printf(Slice<u8> buf, char const* fmt, ...);
 

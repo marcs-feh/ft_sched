@@ -37,6 +37,7 @@ void init(Duration n){
 	limit = n;
 	init_raw_task(&task, nullptr, watchdog_timer_func, nullptr);
 	task.run();
+	printf("[swdg] Initialized\n");
 }
 }
 
@@ -191,7 +192,7 @@ Unit hello(TaskContext){
 
 attribute_force_inline static inline
 void entrypoint(){
-	// swdg::init(Duration::from_milli(100));
+	swdg::init(Duration::from_milli(10));
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
 
 	DeadlineWatcher* watcher = make_deadline_watcher(&main_arena, 32);
@@ -203,7 +204,6 @@ void entrypoint(){
 			if(ok){
 				swdg::reset_watchdog();
 			}
-
 			printf("CHECK: %s\n", ok ? "OK" : "FAIL");fflush(stdout);
 
 			sleep_for(Duration::from_milli(1));
@@ -213,19 +213,17 @@ void entrypoint(){
 	});
 	watcher_task->run();
 
-	auto tmr0 = make_tmr_task(&main_arena, Duration::from_milli(100), [](TaskContext ctx){
+	auto tmr0 = make_tmr_task(&main_arena, Duration::from_milli(33), [](TaskContext ctx){
 		printf("[TMR1] Hello, it's %d\n", ctx.task->id); fflush(stdout);
 		return Unit{};
 	});
 	watcher->watch(&tmr0->supervisor, Duration::from_milli(100));
 
-	auto tmr1 = make_tmr_task(&main_arena, Duration::from_milli(100), [](TaskContext ctx){
+	auto tmr1 = make_tmr_task(&main_arena, Duration::from_milli(33), [](TaskContext ctx){
 		printf("[TMR2] Hello, it's %d\n", ctx.task->id); fflush(stdout);
 		return Unit{};
 	});
 	watcher->watch(&tmr1->supervisor, Duration::from_milli(100));
-
-	// sleep_for(Duration::from_milli(800));
 
 	printf("START TASKS\n");
 	tmr0->run();

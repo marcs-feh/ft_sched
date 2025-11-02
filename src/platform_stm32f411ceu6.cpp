@@ -26,8 +26,11 @@ void trap(){
 //// FT_Sched platform specifics
 #include "ft_sched.hpp"
 
+constexpr usize task_name_size = 12;
+
 struct RawTaskPlatformSpecific {
 	TaskHandle_t handle;
+	char name[task_name_size];
 };
 
 constexpr usize rtos_stack_size_words = 200;
@@ -50,9 +53,12 @@ void RawTask::_init_specifics_and_run(){
 
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 
+	auto namebuf = Slice<u8>{(u8*)&specific->name[0], sizeof(task_name_size)}
+	auto name = buffer_printf(namebuf, "T.%4d", namebuf);
+
 	BaseType_t ok = xTaskCreate(
 		_freertos_task_wrapper,
-		"Task",
+		name.data,
 		rtos_stack_size_words,
 		(void*)this,
 		osPriorityNormal,
