@@ -392,7 +392,6 @@ struct DeadlineWatcher {
 		return _count.load(memory_order_relaxed);
 	}
 
-	[[nodiscard]]
 	bool watch(RawTask* task, Duration limit);
 
 	void _remove_no_lock(DeadlineSlot* node);

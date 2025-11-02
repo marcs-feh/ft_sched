@@ -1,18 +1,41 @@
 // raddbg 0.9.23 project file
 
+recent_file: path: "D:/a/_work/1/s/src/vctools/crt/vcstartup/src/startup/exe_common.inl"
+recent_file: path: "src/main.cpp"
+recent_file: path: "src/platform_windows.cpp"
+recent_file: path: "d:/os/obj/amd64fre/minkernel/crts/ucrt/src/appcrt/startup/mt/objfre/amd64/minkernel/crts/ucrt/src/appcrt/startup/abort.cpp"
 recent_file: path: "src/base.cpp"
 recent_file: path: "src/task.cpp"
-recent_file: path: "src/main.cpp"
 recent_file: path: "src/task.hpp"
 recent_file: path: "src/ft_sched.exe"
+breakpoint:
+{
+  source_location: "src/task.cpp:38:1"
+  hit_count: 0
+}
 target:
 {
-  executable: "src/ft_sched.exe"
-  working_directory: "src/"
+  executable: "src/build/ft_sched.exe"
+  working_directory: "src/build/"
   enabled: 1
 }
 breakpoint:
 {
-  source_location: "src/task.cpp:38:1"
+  source_location: "src/main.cpp:191:1"
+  hit_count: 0
+}
+breakpoint:
+{
+  source_location: "src/main.cpp:166:1"
+  hit_count: 1
+}
+breakpoint:
+{
+  source_location: "src/main.cpp:219:1"
+  hit_count: 1
+}
+breakpoint:
+{
+  source_location: "src/main.cpp:220:1"
   hit_count: 1
 }

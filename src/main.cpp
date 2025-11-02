@@ -98,11 +98,10 @@ Option<T> consensus(T&& a, T&& b, T&& c, Func&& f){
 	return {};
 }
 
-
 // IMPORTANT: The tasks will be concurrently executed, it the caller's
 // responsibility to ensure that whatever arguments were read, either by
 // capture or explicitly are thread safe and do not interfere.
-template<typename Output, Callable<Output> TaskFunc, Callable<void> OnCancel>
+template<typename Output, Callable<Output, TaskContext> TaskFunc, Callable<void, TaskContext> OnCancel>
 struct TMR_Task {
 	struct SubTask {
 		RawTask task;
@@ -110,60 +109,79 @@ struct TMR_Task {
 		Option<Output> result;
 	};
 
-	Array<SubTask, 3> _children;
-	DeadlineWatcher* watcher;
+	RawTask supervisor;
+	DeadlineWatcher watcher;
+	Array<SubTask, 3> workers;
+	Duration worker_deadline;
 
-	Duration deadline;
+	static void _worker_wrapper(RawTask* t){
+		auto sub_task = (SubTask*)t->args;
+		printf("worker ENTER %d\n", t->id); fflush(stdout);
+		auto ctx = TaskContext { &sub_task->task };
+		sub_task->result = sub_task->func(ctx);
+		printf("worker EXIT %d\n", t->id); fflush(stdout);
+	}
 
-	struct Context {
-		TMR_Task* self;
-		DeadlineSlot* slot;
-	};
+	static void _supervisor_wrapper(RawTask* t){
+		printf("supervisor ENTER\n"); fflush(stdout);
+		auto self = (TMR_Task<Output, TaskFunc, OnCancel>*)t->args;
 
-	static void _task_wrapper(void* arg){
-		auto sub_task = (SubTask*)arg;
-
-		sub_task->result = sub_task->func();
-
-		if(sub_task->slot){
-			sub_task->slot.reset();
+		for(int i = 0; i < 3; i ++){
+			self->workers[i].task.run();
 		}
+
+		while(self->watcher.count()){
+			auto ok = self->watcher.scan();
+			printf("TMR SCAN: %d\n", ok); fflush(stdout);
+			sleep_for(Duration::from_milli(1));
+		}
+		printf("supervisor EXIT\n"); fflush(stdout);
 	}
 
 	void run(){
-		for(int i = 0; i < 3; i ++){
-			if(watcher){
-				auto slot = watcher->watch(&_children[i], deadline);
-				_children[i].slot = slot;
-
-				if(slot){
-					slot.reset();
-				}
-			}
-		}
+		printf("starting supervisor\n"); fflush(stdout);
+		supervisor.run();
 	}
 
 	void join(){
-		unimplemented();
+		supervisor.join();
 	}
 
 	Option<Output> result(){
 		unimplemented();
 	}
 
+	void cancel(){
+		for(int i = 0; i < 3; i ++){
+			workers.task[i].cancel();
+		}
+		supervisor.cancel();
+	}
+
 	TMR_Task(TaskFunc&& f)
-		: _children{{.func = f}, {.func = f}, {.func = f}}
-		, watcher{nullptr}
-		, deadline{0}
+		: supervisor{}
+		, watcher{}
+		, workers{}
+		, worker_deadline{0}
 	{}
 };
 
 template<typename F>
-auto make_tmr_task(Arena* a, DeadlineWatcher* w, F&& func){
-	auto t = make<TMR_Task<decltype(func()), F, decltype(_cancellation_nop)>>(a, forward<F>(func));
+auto make_tmr_task(Arena* arena, Duration worker_deadline, F&& func){
+	auto t = make<TMR_Task<decltype(func(TaskContext{})), F, decltype(_cancellation_nop)>>(arena, forward<F>(func));
+	auto slots = make_slice<DeadlineSlot>(arena, 3);
+	ensure(t, "Failed to create TMR task");
+
+	init_deadline_watcher(&t->watcher, slots);
+	t->worker_deadline = worker_deadline;
+	init_raw_task(&t->supervisor, arena, t->_supervisor_wrapper, t);
 
 	for(int i = 0; i < 3; i++){
-		init_raw_task(&t->_children.task[i], a, t->_task_wrapper, t);
+		t->workers[i].func = func;
+		init_raw_task(&t->workers[i].task, arena, t->_worker_wrapper, &t->workers[i]);
+
+		auto res = t->watcher.watch(&t->workers[i].task, t->worker_deadline);
+		ensure(res, "Failed to watch");
 	}
 
 	return t;
@@ -179,7 +197,7 @@ Unit hello(TaskContext){
 
 attribute_force_inline static inline
 void entrypoint(){
-	swdg::init(Duration::from_milli(100));
+	// swdg::init(Duration::from_milli(100));
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
 
 	DeadlineWatcher* watcher = make_deadline_watcher(&main_arena, 32);
@@ -198,41 +216,19 @@ void entrypoint(){
 	});
 	watcher_task->run();
 
-	auto t0 = make_basic_task(&main_arena, [](TaskContext ctx){
-		printf("Begin %d\n", ctx.task->id); fflush(stdout); 
-		sleep_for(Duration::from_milli(200));
-		printf("End %d\n", ctx.task->id); fflush(stdout);
+	auto tmr = make_tmr_task(&main_arena, Duration::from_milli(100), [](TaskContext ctx){
+		sleep_for(Duration::from_milli(1500));
+		if(ctx.task->id == 3){
+			sleep_for(Duration::from_milli(4000));
+		}
+		printf("Hello, it's %d\n", ctx.task->id); fflush(stdout);
 		return Unit{};
 	});
-	watcher->watch(t0->raw_task(), Duration::from_milli(300));
-	t0->run();
+	tmr->run();
+	tmr->join();
 
-	auto t1 = make_basic_task(&main_arena, [](TaskContext ctx){
-		printf("Begin %d\n", ctx.task->id); fflush(stdout); 
-		sleep_for(Duration::from_milli(300));
-		printf("End %d\n", ctx.task->id); fflush(stdout);
-		return Unit{};
-	});
-	watcher->watch(t1->raw_task(), Duration::from_milli(100));
-	t1->run();
+	watcher->watch(&tmr->supervisor, Duration::from_milli(400));
 
-	auto t2 = make_basic_task(&main_arena, [](TaskContext ctx){
-		printf("Begin %d\n", ctx.task->id); fflush(stdout); 
-		sleep_for(Duration::from_milli(150));
-		printf("End %d\n", ctx.task->id); fflush(stdout);
-		return Unit{};
-	});
-	watcher->watch(t1->raw_task(), Duration::from_milli(300));
-	t2->run();
-	
-	// running = false;
-
-	t0->join();
-	t1->join();
-	t2->join();
-
-	printf("Waiting...\n");
-	while(watcher->count());
 }
 
 
