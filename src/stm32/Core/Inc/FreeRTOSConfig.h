@@ -158,7 +158,7 @@ header file. */
 extern int printf(char const*, ...);
 #define configASSERT( x ) do { \
   if ( (x) == 0 ) { \
-    printf("Assertion failed: %s\r\n", #x); \
+    printf("(%s:%d) Assertion failed: %s\r\n", __FILE__, __LINE__, #x); \
     taskDISABLE_INTERRUPTS(); \
     for( ;; ); \
   } \

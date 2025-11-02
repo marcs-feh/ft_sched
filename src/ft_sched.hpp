@@ -112,10 +112,7 @@ struct DeadlineSlot {
 using RawTaskFunc = void (*)(RawTask* t);
 
 struct RawTaskPlatformSpecificData {
-	union {
-		uintptr _align;
-		char data[16];
-	};
+	alignas(alignof(void*) * 2) char data[16];
 };
 
 using TaskCancelCallback = void (*)(RawTask* self);

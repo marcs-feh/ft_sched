@@ -26,38 +26,28 @@ void trap(){
 //// FT_Sched platform specifics
 #include "ft_sched.hpp"
 
-constexpr usize task_name_size = 12;
-
 struct RawTaskPlatformSpecific {
 	alignas(portBYTE_ALIGNMENT) TaskHandle_t handle;
-	char name[task_name_size];
+	alignas(portBYTE_ALIGNMENT) void* stack_base;
+	u32 stack_size;
 };
 
 constexpr usize rtos_stack_size_words = 200;
 
-static inline
-RawTaskPlatformSpecific read_specifics(RawTask* t, ){
-	RawTaskPlatformSpecific out;
-	mem_set(&out, 0, sizeof(out))
-	mem_copy(&out, &t->specifics, sizeof(out));
-	return out;
-}
-
 static
 void _freertos_task_wrapper(void* task_ptr){
 	RawTask* task = (RawTask*)task_ptr;
-	auto specific = read_specifics(this);
+	auto specific = (RawTaskPlatformSpecific*)(&task->_specific);
 
 	task->_status.store(TaskStatus_Started);
 	printf("ENTER TASK %d\r\n", int(task->id));
 	task->func(task);
 	printf("FINISH TASK %d\r\n", int(task->id));
 	task->_status.store(TaskStatus_Done);
-	// vTaskDelete(NULL); // IMPORTANT: Self-Deinitialize task
 
 	/* Yield spin */
 	while(1){
-		osDelay(0);
+		taskYIELD();
 	}
 }
 
@@ -70,36 +60,51 @@ void RawTask::_init_specifics_and_run(){
 
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 
-	auto namebuf = Slice<u8>{(u8*)&specific->name[0], sizeof(task_name_size)};
-	auto name = buffer_printf(namebuf, "T:%d", int(id));
+	auto name = arena_printf(arena, "T:%d", int(id));
+	auto tcb = make<StaticTask_t>(arena);
+	auto stack = (StackType_t*)arena->alloc(rtos_stack_size_words * sizeof(StackType_t), portBYTE_ALIGNMENT * 2);
 
-	BaseType_t ok = xTaskCreate(
-		_freertos_task_wrapper,
-		name.data,
-		rtos_stack_size_words,
-		(void*)this,
-		osPriorityNormal,
-		&specific->handle
-	) == pdPASS;
+	if(!name.data){
+		panic("Failed to allocate name");
+	}
+	if(!tcb){
+		panic("Failed to allocate TCB");
+	}
+	if(!stack){
+		panic("Failed to allocate stack");
+	}
 
-	ensure(ok, "Failed to create thread");
+	TaskHandle_t handle = xTaskCreateStatic(
+		_freertos_task_wrapper, /* Task body */
+		name.data, /* Name */
+		rtos_stack_size_words, /* Stack size */
+		(void*)this, /* Task Parameter */
+		osPriorityNormal, /* Priority */
+		stack, /* Stack data */
+		tcb /* TCB data */
+	);
+
+	specific->handle = handle;
 }
 
 void RawTask::_join_and_deinit_specifics(){
-	// auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
-	auto specific = read_specifics(this);
+	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
+	TaskHandle_t handle = specific->handle;
 
 	for(
 		auto status = this->_status.load(memory_order_relaxed);
-		status != TaskStatus_Fault && status != TaskStatus_Done;
+		status < TaskStatus_Done;
 		status = this->_status.load(memory_order_relaxed)
 	){
-		printf("Joining %d (status=%d)\r\n", int(id), int(status)); fflush(stdout);
+		printf("Joining from %d (status=%d)\r\n", int(id), int(status)); fflush(stdout);
 		sleep_for(Duration::from_milli(250));
 	}
 
-	if(specific->handle)
-		vTaskDelete(specific->handle);
+	vTaskDelete(handle);
+	printf("DELETED: %d\r\n", int(id));
+
+	// if(specific.handle)
+	// 	vTaskDelete(specific.handle);
 }
 
 void RawTask::_cancel_and_deinit_specifics(){

@@ -137,14 +137,18 @@ void entrypoint(){
 	printf("START TASKS\n");
 
 	auto t = make_basic_task(&main_arena, [](TaskContext ctx){
-		printf("Hello %d\r\n", int(ctx.id()));
 		auto inner = make_basic_task(&main_arena, [](TaskContext ctx){
 			printf("[INNER] Hello %d\r\n", int(ctx.id()));
 			return Unit{};
 		});
 
+		printf("BEGIN INNER\r\n");
 		inner->run();
+		printf("JOIN INNER\r\n");
 		inner->join();
+		printf("END INNER\r\n");
+
+		printf("[OUTER] Hello %d\r\n", int(ctx.id()));
 
 		return Unit{};
 	});
@@ -156,12 +160,11 @@ void entrypoint(){
 	// tmr0->join();
 	// printf("RESULT: %d\n", tmr0->result().unwrap());
 
+	// char anim[] = {'-', '\\', '|', '/'};
+	// u8 anim_frame = 0;
+	printf("--- ENTRYPOINT END ---\r\n");
 	while(1){
-		printf(".\r\n");fflush(stdout);
-		sleep_for(Duration::from_milli(500));
 	}
-
-	while(1);
 }
 
 //// ---------------------------------------------
