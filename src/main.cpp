@@ -6,6 +6,7 @@
 
 extern "C" int puts(char const*);
 
+#if !defined(FT_SCHED_PLATFORM_STM32F411CEU6)
 namespace swdg {
 static Atomic<TimeTick> last_tick = 0;
 
@@ -40,6 +41,7 @@ void init(Duration n){
 	printf("[swdg] Initialized\n");
 }
 }
+#endif
 
 template<class T>
 void print_list(List<T> const& list, char const* elem_fmt){
@@ -91,162 +93,75 @@ constexpr auto default_consensus_func = [](T const& a, T const& b) -> bool {
 	return a == b;
 };
 
-
-// IMPORTANT: The tasks will be concurrently executed, it the caller's
-// responsibility to ensure that whatever arguments were read, either by
-// capture or explicitly are thread safe and do not interfere.
-template<typename Output, Callable<Output, TaskContext> TaskFunc, Callable<void, TaskContext> OnCancel>
-struct TMR_Task {
-	struct SubTask {
-		RawTask task;
-		TaskFunc func;
-		Option<Output> result;
-	};
-
-	RawTask supervisor;
-	DeadlineWatcher watcher;
-	Array<SubTask, 3> workers;
-	Duration worker_deadline;
-	ConsensusFunc<Option<Output>> consensus_func;
-
-	static void _worker_wrapper(RawTask* t){
-		auto sub_task = (SubTask*)t->args;
-		auto ctx = TaskContext { &sub_task->task };
-		sub_task->result = sub_task->func(ctx);
-	}
-
-	static void _supervisor_wrapper(RawTask* t){
-		auto self = (TMR_Task<Output, TaskFunc, OnCancel>*)t->args;
-
-		for(int i = 0; i < 3; i ++){
-			self->workers[i].task.run();
-		}
-
-		while(self->watcher.count()){
-			self->watcher.scan();
-			sleep_for(Duration::from_milli(1));
-		}
-	}
-
-	void run(){
-		supervisor.run();
-	}
-
-	void join(){
-		supervisor.join();
-	}
-
-	Option<Output> result(){
-		if(supervisor.status() < TaskStatus_Done){
-			return {};
-		}
-
-		int n = consensus(workers[0].result, workers[1].result, workers[2].result, consensus_func);
-		if(n < 0){
-			return {};
-		}
-
-		return move(workers[n].result);
-	}
-
-	void cancel(){
-		for(int i = 0; i < 3; i++){
-			workers.task[i].cancel();
-		}
-		supervisor.cancel();
-	}
-
-	TaskStatus status(){
-		return supervisor._status.load(memory_order_relaxed);
-	}
-
-	RawTask* raw_task(){
-		return &supervisor;
-	}
-
-	u32 id(){
-		return supervisor.id;
-	}
-
-	TMR_Task()
-		: supervisor{}
-		, watcher{}
-		, workers{}
-		, worker_deadline{0}
-		, consensus_func{default_consensus_func<Option<Output>>}
-	{}
-};
-
-static_assert(Task<TMR_Task<Unit, decltype(_task_nop), decltype(_cancellation_nop)>, Unit>, "BasicTask does not conform to Task concept");
-
-template<typename F>
-auto make_tmr_task(Arena* arena, Duration worker_deadline, F&& func){
-	auto t = make<TMR_Task<decltype(func(TaskContext{})), F, decltype(_cancellation_nop)>>(arena);
-	auto slots = make_slice<DeadlineSlot>(arena, 3);
-	ensure(t, "Failed to create TMR task");
-
-	init_deadline_watcher(&t->watcher, slots);
-	t->worker_deadline = worker_deadline;
-	init_raw_task(&t->supervisor, arena, t->_supervisor_wrapper, t);
-
-	for(int i = 0; i < 3; i++){
-		t->workers[i].func = func;
-		init_raw_task(&t->workers[i].task, arena, t->_worker_wrapper, &t->workers[i]);
-
-		auto res = t->watcher.watch(&t->workers[i].task, t->worker_deadline);
-		ensure(res, "Failed to watch");
-	}
-
-	return t;
-}
-
 Arena main_arena;
 constexpr usize main_arena_size = 4096;
 u8 main_arena_memory[main_arena_size];
 
-Unit hello(TaskContext){
-	return {};
-}
-
 attribute_force_inline static inline
 void entrypoint(){
-	swdg::init(Duration::from_milli(1'000));
+	// swdg::init(Duration::from_milli(1'000));
+
+	for(int i = 5; i > 0; i --){
+		sleep_for(Duration::from_milli(1'000));
+		printf("%d\r\n", i);
+	}
+
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
 
 	DeadlineWatcher* watcher = make_deadline_watcher(&main_arena, 32);
 
 	bool running = true;
-	auto watcher_task = make_basic_task(&main_arena, [watcher, &running](TaskContext){
-		while(running){
-			auto ok = watcher->scan();
-			if(ok){
-				swdg::reset_watchdog();
-			}
-			// printf("CHECK: %s\n", ok ? "OK" : "FAIL");fflush(stdout);
+//	auto watcher_task = make_basic_task(&main_arena, [watcher, &running](TaskContext){
+//		while(running){
+//			auto ok = watcher->scan();
+//			if(ok){
+//				swdg::reset_watchdog();
+//			}
+//			// printf("CHECK: %s\n", ok ? "OK" : "FAIL");fflush(stdout);
+//
+//			sleep_for(Duration::from_milli(1));
+//		}
+//
+//		return Unit{};
+//	});
+//	watcher_task->run();
 
-			sleep_for(Duration::from_milli(1));
-		}
+	// auto tmr0 = make_tmr_task(&main_arena, Duration::from_milli(33), [](TaskContext ctx){
+	// 	if(ctx.id() == 6)
+	// 		ctx.task->cancel();
+
+	// 	printf("[TMR1] Hello, it's %d\n", ctx.task->id); fflush(stdout);
+	// 	return 69;
+	// });
+	// printf("SPAWNED: %d\n", tmr0->supervisor.id);
+	printf("START TASKS\n");
+
+	auto t = make_basic_task(&main_arena, [](TaskContext ctx){
+		printf("Hello %d\r\n", int(ctx.id()));
+		auto inner = make_basic_task(&main_arena, [](TaskContext ctx){
+			printf("[INNER] Hello %d\r\n", int(ctx.id()));
+			return Unit{};
+		});
+
+		inner->run();
+		inner->join();
 
 		return Unit{};
 	});
-	watcher_task->run();
 
-	auto tmr0 = make_tmr_task(&main_arena, Duration::from_milli(33), [](TaskContext ctx){
-		if(ctx.id() == 6)
-			ctx.task->cancel();
+	t->run();
+	t->join();
 
-		printf("[TMR1] Hello, it's %d\n", ctx.task->id); fflush(stdout);
-		return 69;
-	});
-	watcher->watch(&tmr0->supervisor, Duration::from_milli(2000));
-	printf("SPAWNED: %d\n", tmr0->supervisor.id);
+	// tmr0->run();
+	// tmr0->join();
+	// printf("RESULT: %d\n", tmr0->result().unwrap());
 
+	while(1){
+		printf(".\r\n");fflush(stdout);
+		sleep_for(Duration::from_milli(500));
+	}
 
-	printf("START TASKS\n");
-	tmr0->run();
-	tmr0->join();
-
-	printf("RESULT: %d\n", tmr0->result().unwrap());
+	while(1);
 }
 
 //// ---------------------------------------------

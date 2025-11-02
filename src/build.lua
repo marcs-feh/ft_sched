@@ -121,8 +121,8 @@ function execute_build(flash_serial, verbose)
 	if platform == 'stm32blackpill' then
 		output = 'build/libft_sched.a'
 
-		exec:submit('%s -c main.cpp %s -o build/main.o %s', cc, join_space(cflags), output, join_space(ldflags)):wait()
-		exec:submit('%s rcs %s main.o', ar, output):wait()
+		exec:submit('%s %s -c main.cpp -o build/main.o %s', cc, join_space(cflags), join_space(ldflags)):wait()
+		exec:submit('%s rcs %s build/main.o', ar, output):wait()
 
 		local dest = output:gsub('build/', 'stm32/', 1)
 		os.rename(output, dest)

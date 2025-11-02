@@ -193,8 +193,8 @@ struct TaskContext {
 	void ensure(bool pred, cstring msg, CALLER_LOCATION){
 		if(!pred){
 			error_printf(caller_location.file_name(), caller_location.line(),
-				"[Task %2d]Assertion failed: %s\r\n",
-				task->id, msg
+				"[Task %2d] Assertion failed: %s\r\n",
+				int(task->id), msg
 			);
 			task->cancel();
 		}

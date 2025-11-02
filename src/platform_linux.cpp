@@ -52,17 +52,26 @@ void RawTask::_init_specifics_and_run(){
 }
 
 void RawTask::_join_and_deinit_specifics(){
+	auto status = this->_status.load(memory_order_relaxed);
+	if(status == TaskStatus_Fault || status == TaskStatus_Done){
+		return;
+	}
+
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 	pthread_join(specific->handle, NULL);
 
-	auto status = this->_status.load();
+	status = this->_status.load();
 	ensure(status == TaskStatus_Fault || status == TaskStatus_Done, "Invalid task status");
 }
 
 void RawTask::_cancel_and_deinit_specifics(){
+	auto status = _status.load(memory_order_relaxed);
+	if(status == TaskStatus_Fault || status == TaskStatus_Done){
+		return;
+	}
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 
-	if(_status == TaskStatus_Started){
+	if(_status.load(memory_order_relaxed) == TaskStatus_Started){
 		pthread_cancel(specific->handle);
 	}
 
