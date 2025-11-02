@@ -4,6 +4,8 @@
 
 #include "ft_sched.hpp"
 
+#include "tmr.hpp"
+
 extern "C" int puts(char const*);
 
 #if !defined(FT_SCHED_PLATFORM_STM32F411CEU6)
@@ -136,22 +138,22 @@ void entrypoint(){
 	// printf("SPAWNED: %d\n", tmr0->supervisor.id);
 	printf("START TASKS\n");
 
-	auto t = make_basic_task(&main_arena, [](TaskContext ctx){
-		auto inner = make_basic_task(&main_arena, [](TaskContext ctx){
-			printf("[INNER] Hello %d\r\n", int(ctx.id()));
-			return Unit{};
-		});
+	// auto t = make_basic_task(&main_arena, [](TaskContext ctx){
+	// 	auto inner = make_basic_task(&main_arena, [](TaskContext ctx){
+	// 		printf("[INNER] Hello %d\r\n", int(ctx.id()));
+	// 		return Unit{};
+	// 	});
 
-		printf("BEGIN INNER\r\n");
-		inner->run();
-		printf("JOIN INNER\r\n");
-		inner->join();
-		printf("END INNER\r\n");
+	// 	printf("BEGIN INNER\r\n");
+	// 	inner->run();
+	// 	printf("JOIN INNER\r\n");
+	// 	inner->join();
+	// 	printf("END INNER\r\n");
 
-		printf("[OUTER] Hello %d\r\n", int(ctx.id()));
+	// 	printf("[OUTER] Hello %d\r\n", int(ctx.id()));
 
-		return Unit{};
-	});
+	// 	return Unit{};
+	// });
 
 	t->run();
 	t->join();

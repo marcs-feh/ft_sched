@@ -12,4 +12,8 @@
 .ninja_*
 build
 *.d
-*.log
+*.log.venv
+venv
+*.csv
+*.elf
+*.bin
