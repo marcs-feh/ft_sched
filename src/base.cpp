@@ -408,7 +408,6 @@ String arena_printf(Arena* arena, char const* fmt, ...){
 	return res;
 }
 
-
 //// Heap
 // extern "C"{
 // 	void* malloc(size_t);

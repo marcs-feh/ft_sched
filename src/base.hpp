@@ -110,6 +110,7 @@ struct Nat {};
 
 // Replacement for `void` when a complete type is needed
 struct Unit {};
+constexpr bool operator==(Unit const&, Unit const&){ return true; }
 
 // Custom tagged operator new overload, to avoid clashes with other library defs and not need to include <new>
 inline void *operator new(decltype(sizeof 0), void* ptr, Nat) {
@@ -297,6 +298,14 @@ struct Option {
 		}
 		_has_value = false;
 		return this;
+	}
+
+	constexpr bool operator==(Option<T> const& opt) const {
+		auto same_has_value = opt._has_value == _has_value;
+		if(_has_value && same_has_value){
+			return opt._value == _value;
+		}
+		return same_has_value;
 	}
 
 	constexpr
@@ -572,6 +581,10 @@ struct List {
 	Arena* arena;
 
 	bool resize(usize new_cap){
+		if(!arena){
+			return false;
+		}
+
 		T* new_data = (T*)this->arena->realloc(this->data, this->cap * sizeof(T), new_cap * sizeof(T), alignof(T));
 		if(!new_data){
 			return false;
@@ -686,7 +699,6 @@ struct List {
 	}
 };
 
-
 template<class T> [[nodiscard]]
 List<T> make_list(Arena* a, usize len, usize cap){
 	auto p = (T*)a->alloc(sizeof(T) * cap, alignof(T));
@@ -698,105 +710,6 @@ template<class T> [[nodiscard]]
 List<T> make_list(Arena* a){
 	return List<T>{nullptr, 0, 0, a};
 }
-
-//// Statically sized list
-// template<class T, usize N>
-// struct SmallList {
-// 	T      data[N]{};
-// 	usize  len = 0;
-
-// 	// bool resize(usize new_cap){
-// 	// 	if(new_cap <= N){
-// 	// 		if(new_cap > N){
-
-// 	// 		}
-// 	// 		this->len = min(this->len, new_cap);
-// 	// 	}
-// 	// 	return true;
-// 	// }
-
-// 	bool append(T const& elem){
-// 		if(this->len >= N){
-// 			return false;
-// 		}
-
-// 		this->data[this->len] = elem;
-// 		this->len += 1;
-// 		return true;
-// 	}
-
-// 	bool pop(){
-// 		if(this->len == 0){
-// 			return false;
-// 		}
-
-// 		this->len -= 1;
-// 		return true;
-// 	}
-
-// 	bool pop(T* elem){
-// 		if(this->len == 0){
-// 			return false;
-// 		}
-
-// 		this->len -= 1;
-// 		*elem = this->data[this->len];
-// 		return true;
-// 	}
-
-// 	bool insert(T const& elem, usize idx){
-// 		ensure(idx <= this->len, "Out of bounds insertion");
-
-// 		if(this->len >= N){
-// 			return false;
-// 		}
-// 		mem_copy(&this->data[idx + 1], &this->data[idx], sizeof(T) * (this->len - idx));
-
-// 		new (&this->data[this->len], Nat{}) T(elem);
-// 		this->len += 1;
-// 		return true;
-// 	}
-
-// 	bool remove(usize idx){
-// 		ensure(idx < this->len, "Out of bounds deletion");
-// 		if(this->len == 0){
-// 			return false;
-// 		}
-// 		mem_copy(&this->data[idx], &this->data[idx + 1], sizeof(T) * (this->len - idx));
-// 		this->len -= 1;
-// 		return true;
-// 	}
-
-// 	Slice<T> slice() {
-// 		return Slice<T>{this->data, this->len};
-// 	}
-
-// 	Slice<T> slice(usize start, usize end) {
-// 		ensure(end <= this->len && end >= start, "Invalid slicing indices");
-// 		return Slice<T>{ &this->data[start], end - start };
-// 	}
-
-// 	Slice<T> take(usize count) {
-// 		ensure(count <= this->len, "Cannot take more than List length");
-// 		return Slice<T>{ this->data, count };
-// 	}
-
-// 	Slice<T> skip(usize count) {
-// 		ensure(count <= this->len, "Cannot skip more than slice length");
-// 		return Slice<T>{ &this->data[count], this->len - count };
-// 	}
-
-// 	T& operator[](usize idx) {
-// 		ensure(idx < len, "Out of bounds list access");
-// 		return data[idx];
-// 	}
-
-// 	T const& operator[](usize idx) const {
-// 		ensure(idx < len, "Out of bounds list access");
-// 		return data[idx];
-// 	}
-// };
-
 
 //// Strings
 struct String {
@@ -1030,4 +943,3 @@ SPSC_Queue<T>* make_spsc_queue(Arena* a, usize capacity){
 
 	return queue;
 }
-

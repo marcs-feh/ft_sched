@@ -10,7 +10,7 @@
 #endif
 
 //// Timing
-using TimeTick = isize;
+using TimeTick = usize;
 
 struct Duration {
 	static constexpr isize scale = 1'000'000;
@@ -177,7 +177,8 @@ concept Task = requires(Impl impl){
 	{ impl.status() } -> SameAs<TaskStatus>;
 	{ impl.cancel() } -> SameAs<void>;
 	{ impl.join() } -> SameAs<void>;
-	{ impl.raw_task() } -> SameAs<RawTask*>;
+	{ impl.id() } -> SameAs<u32>;
+	// { impl.raw_task() } -> SameAs<RawTask*>;
 };
 
 template<typename F, typename Output, typename ... Args>
@@ -198,7 +199,13 @@ struct TaskContext {
 			task->cancel();
 		}
 	}
+
+	u32 id() const {
+		return task->id;
+	}
 };
+
+constexpr auto _task_nop = [](TaskContext) -> Unit { return{}; };
 
 constexpr inline auto _cancellation_nop = [](TaskContext){ /* Nothing */ };
 
@@ -250,6 +257,10 @@ struct BasicTask {
 		return &_task;
 	}
 
+	u32 id(){
+		return _task.id;
+	}
+
 	void cancel(){
 		_task.cancel();
 
@@ -270,6 +281,8 @@ struct BasicTask {
 		, _on_cancel{c}
 	{}
 };
+
+static_assert(Task<BasicTask<Unit, decltype(_task_nop), decltype(_cancellation_nop)>, Unit>, "BasicTask does not conform to Task concept");
 
 template<typename F>
 auto make_basic_task(Arena* a, F&& func){

@@ -69,27 +69,28 @@ void print_info(){
 	msg = buffer_printf(buf, "RawTask size:   %td", sizeof(RawTask)); puts(msg.data);
 }
 
-template<typename Func, typename T>
-concept ConsensusFunc = requires(Func cons, T const& x) {
-	{ cons(x, x, x) } -> SameAs<bool>;
-};
+template<typename T>
+using ConsensusFunc = bool (*)(T const&, T const&);
 
-template<typename T, ConsensusFunc<T> Func>
-Option<T> consensus(T&& a, T&& b, T&& c, Func&& f){
+template<typename T>
+int consensus(T& a, T& b, T& c, ConsensusFunc<T> f){
 	auto ab = f(a, b);
-	auto ac = f(a, c);
 	auto bc = f(b, c);
+	auto ca = f(a, c);
 
-	if(ab)
-		return {forward<T>(a)};
-	if(ac)
-		return {forward<T>(a)};
-	if(bc)
-		return {forward<T>(b)};
+	if(ab) return 0;
+	if(bc) return 1;
+	if(ca) return 2;
 
 	// No consensus, uh oh!
-	return {};
+	return -1;
 }
+
+template<typename T>
+constexpr auto default_consensus_func = [](T const& a, T const& b) -> bool {
+	return a == b;
+};
+
 
 // IMPORTANT: The tasks will be concurrently executed, it the caller's
 // responsibility to ensure that whatever arguments were read, either by
@@ -106,6 +107,7 @@ struct TMR_Task {
 	DeadlineWatcher watcher;
 	Array<SubTask, 3> workers;
 	Duration worker_deadline;
+	ConsensusFunc<Option<Output>> consensus_func;
 
 	static void _worker_wrapper(RawTask* t){
 		auto sub_task = (SubTask*)t->args;
@@ -121,6 +123,7 @@ struct TMR_Task {
 		}
 
 		while(self->watcher.count()){
+			self->watcher.scan();
 			sleep_for(Duration::from_milli(1));
 		}
 	}
@@ -134,14 +137,35 @@ struct TMR_Task {
 	}
 
 	Option<Output> result(){
-		unimplemented();
+		if(supervisor.status() < TaskStatus_Done){
+			return {};
+		}
+
+		int n = consensus(workers[0].result, workers[1].result, workers[2].result, consensus_func);
+		if(n < 0){
+			return {};
+		}
+
+		return move(workers[n].result);
 	}
 
 	void cancel(){
-		for(int i = 0; i < 3; i ++){
+		for(int i = 0; i < 3; i++){
 			workers.task[i].cancel();
 		}
 		supervisor.cancel();
+	}
+
+	TaskStatus status(){
+		return supervisor._status.load(memory_order_relaxed);
+	}
+
+	RawTask* raw_task(){
+		return &supervisor;
+	}
+
+	u32 id(){
+		return supervisor.id;
 	}
 
 	TMR_Task()
@@ -149,8 +173,11 @@ struct TMR_Task {
 		, watcher{}
 		, workers{}
 		, worker_deadline{0}
+		, consensus_func{default_consensus_func<Option<Output>>}
 	{}
 };
+
+static_assert(Task<TMR_Task<Unit, decltype(_task_nop), decltype(_cancellation_nop)>, Unit>, "BasicTask does not conform to Task concept");
 
 template<typename F>
 auto make_tmr_task(Arena* arena, Duration worker_deadline, F&& func){
@@ -183,7 +210,7 @@ Unit hello(TaskContext){
 
 attribute_force_inline static inline
 void entrypoint(){
-	swdg::init(Duration::from_milli(10));
+	swdg::init(Duration::from_milli(1'000));
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
 
 	DeadlineWatcher* watcher = make_deadline_watcher(&main_arena, 32);
@@ -195,7 +222,7 @@ void entrypoint(){
 			if(ok){
 				swdg::reset_watchdog();
 			}
-			printf("CHECK: %s\n", ok ? "OK" : "FAIL");fflush(stdout);
+			// printf("CHECK: %s\n", ok ? "OK" : "FAIL");fflush(stdout);
 
 			sleep_for(Duration::from_milli(1));
 		}
@@ -205,25 +232,22 @@ void entrypoint(){
 	watcher_task->run();
 
 	auto tmr0 = make_tmr_task(&main_arena, Duration::from_milli(33), [](TaskContext ctx){
-		printf("[TMR1] Hello, it's %d\n", ctx.task->id); fflush(stdout);
-		return Unit{};
-	});
-	watcher->watch(&tmr0->supervisor, Duration::from_milli(100));
+		if(ctx.id() == 6)
+			ctx.task->cancel();
 
-	auto tmr1 = make_tmr_task(&main_arena, Duration::from_milli(33), [](TaskContext ctx){
-		printf("[TMR2] Hello, it's %d\n", ctx.task->id); fflush(stdout);
-		return Unit{};
+		printf("[TMR1] Hello, it's %d\n", ctx.task->id); fflush(stdout);
+		return 69;
 	});
-	watcher->watch(&tmr1->supervisor, Duration::from_milli(100));
+	watcher->watch(&tmr0->supervisor, Duration::from_milli(2000));
+	printf("SPAWNED: %d\n", tmr0->supervisor.id);
+
 
 	printf("START TASKS\n");
 	tmr0->run();
-	tmr1->run();
-
 	tmr0->join();
-	tmr1->join();
-}
 
+	printf("RESULT: %d\n", tmr0->result().unwrap());
+}
 
 //// ---------------------------------------------
 #if defined(FT_SCHED_NO_MAIN)
