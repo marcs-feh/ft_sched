@@ -1,4 +1,4 @@
-/* File auto generated at 2025-10-31 18:31:30 */
+/* File auto generated at 2025-11-02 11:11:00 */
 constexpr u32 CRC32_POLYNOMIAL = 0xEDB88320;
 constexpr u32 crc32_lut[] = {
 	0x00000000,0xedb88320,0x36c98560,0xdb710640,0x6d930ac0,0x802b89e0,0x5b5a8fa0,0xb6e20c80,

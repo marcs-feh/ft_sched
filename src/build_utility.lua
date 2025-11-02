@@ -4,6 +4,10 @@ local Executor = {}
 
 M.REDIRECT_STDERR = '2>&1'
 
+function string:trim()
+  return self:match("^%s*(.-)%s*$")
+end
+
 function Executor:new()
 	local o = {}
 	setmetatable(o, self)
@@ -67,25 +71,26 @@ function Executor:submit(cmd, ...)
 	return self
 end
 
-function Executor:wait(verbose)
+function Executor:wait()
 	local results = {}
-	local errors = {}
+	local has_error = false
 
 	for i, t in ipairs(self.tasks) do
 		local ok, result, err = pcall(function() return t:wait() end)
-		results[#results+1] = {ok, result}
+		results[#results+1] = result:trim()
 
 		if not ok then
-			errors[#errors+1] = ('task `%s` has failed:\n %s'):format(t.cmd, result)
+			results[#results] = ('task `%s` has failed:\n %s'):format(t.cmd, result)
+			has_error = true
 		end
 
-		if verbose then
-			print(result, err)
+		if self.verbose and #result > 0 then
+			print(result)
 		end
 	end
 
-	if #errors > 0 then
-		error(table.concat(errors, '\n'), 	2)
+	if has_error then
+		error(table.concat(results, '\n'), 2)
 	end
 
 	self.tasks = {}

@@ -59,7 +59,6 @@ void print_slice(Slice<T> slice, char const* elem_fmt){
 	} printf("]\n");
 }
 
-static
 void print_info(){
 	u8 bufdata[48];
 	auto buf = Slice<u8>(&bufdata[0], sizeof(bufdata));
@@ -68,13 +67,6 @@ void print_info(){
 	msg = buffer_printf(buf, "Address Width:  %zu-bit", sizeof(void*) * 8); puts(msg.data);
 	msg = buffer_printf(buf, "Tick Frequency: %tu Hz", tick_frequency()); puts(msg.data);
 	msg = buffer_printf(buf, "RawTask size:   %td", sizeof(RawTask)); puts(msg.data);
-}
-
-TimeTick start = 0;
-void somebody(RawTask* t){
-	for(int i = 0;;i++){
-		printf("Hi %d\r\n", i);
-	}
 }
 
 template<typename Func, typename T>
@@ -129,7 +121,6 @@ struct TMR_Task {
 		}
 
 		while(self->watcher.count()){
-			auto ok = self->watcher.scan();
 			sleep_for(Duration::from_milli(1));
 		}
 	}
@@ -153,7 +144,7 @@ struct TMR_Task {
 		supervisor.cancel();
 	}
 
-	TMR_Task(TaskFunc&& f)
+	TMR_Task()
 		: supervisor{}
 		, watcher{}
 		, workers{}
@@ -163,7 +154,7 @@ struct TMR_Task {
 
 template<typename F>
 auto make_tmr_task(Arena* arena, Duration worker_deadline, F&& func){
-	auto t = make<TMR_Task<decltype(func(TaskContext{})), F, decltype(_cancellation_nop)>>(arena, forward<F>(func));
+	auto t = make<TMR_Task<decltype(func(TaskContext{})), F, decltype(_cancellation_nop)>>(arena);
 	auto slots = make_slice<DeadlineSlot>(arena, 3);
 	ensure(t, "Failed to create TMR task");
 

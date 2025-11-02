@@ -282,7 +282,7 @@ auto make_basic_task(Arena* a, F&& func){
 }
 
 template<typename F, Callable<void> C>
-auto make_basic_task(Arena* a, F&& func, C&& cancel, DeadlineSlot* deadline = nullptr){
+auto make_basic_task(Arena* a, F&& func, C&& cancel){
 	auto t = make<BasicTask<decltype(func(TaskContext{})), F, C>>(a, forward<F>(func), forward<C>(cancel));
 
 	init_raw_task(&t->_task, a, t->_basic_task_wrapper, t);

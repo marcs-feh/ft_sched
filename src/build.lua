@@ -62,17 +62,12 @@ function execute_build(flash_serial, verbose)
 	local exec = u.Executor:new()
 	exec.verbose = verbose
 
-	local sources = {
-		'main.cpp',
-	}
-	local objects = {}
-
 	if platform == 'linux' then
 		cflags[#cflags+1] = '-fPIC'
-		sources[#sources+1] = 'platform_linux.cpp'
+		cflags[#cflags+1] = '-DFT_SCHED_PLATFORM_LINUX'
 	elseif platform == 'windows' then
 		cflags[#cflags+1] = '-D_CRT_SECURE_NO_WARNINGS'
-		sources[#sources+1] = 'platform_windows.cpp'
+		cflags[#cflags+1] = '-DFT_SCHED_PLATFORM_WINDOWS'
 	elseif platform == 'stm32blackpill' then
 		cc = 'arm-none-eabi-g++'
 		ar = 'arm-none-eabi-ar'
@@ -98,17 +93,16 @@ function execute_build(flash_serial, verbose)
 			'-I./stm32/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F',
 
 			'-DFT_SCHED_NO_MAIN',
+			'-DFT_SCHED_PLATFORM_STM32F411CEU6',
 		}
 
 		cflags = join_list(cflags, stm32flags)
-		sources[#sources+1] = 'platform_stm32f411ceu6.cpp'
 	end
 
 	if build_mode == 'debug' then
+		ldflags[#cflags+1] = '-g'
 		cflags[#cflags+1] = '-g'
 		cflags[#cflags+1] = '-O0'
-
-		ldflags[#cflags+1] = '-g'
 	elseif build_mode == 'release' then
 		cflags[#cflags+1] = '-Os'
 	end
@@ -124,19 +118,11 @@ function execute_build(flash_serial, verbose)
 
 	local output = 'build/ft_sched.exe'
 
-	for _, file in ipairs(sources) do
-		local obj = ('build/%s.o'):format(file)
-		exec:submit('%s %s -c %s -o %s', cc, join_space(cflags), file, obj)
-		objects[#objects+1] = obj
-	end
-	exec:wait()
-
 	if platform == 'stm32blackpill' then
 		output = 'build/libft_sched.a'
-		exec:wait()
 
-		exec:submit('%s rcs %s %s', ar, output, join_space(objects), join_space(ldflags)):wait()
-		print(output)
+		exec:submit('%s -c main.cpp %s -o build/main.o %s', cc, join_space(cflags), output, join_space(ldflags)):wait()
+		exec:submit('%s rcs %s main.o', ar, output):wait()
 
 		local dest = output:gsub('build/', 'stm32/', 1)
 		os.rename(output, dest)
@@ -150,7 +136,7 @@ function execute_build(flash_serial, verbose)
 			exec:submit('st-flash --serial %s --connect-under-reset write stm32/build/stm32.bin 0x08000000', flash_serial)
 		end
 	else
-		exec:submit('%s %s %s -o %s', cc, join_space(cflags), join_space(sources), output, join_space(ldflags))
+		exec:submit('%s main.cpp %s -o %s', cc, join_space(cflags), output, join_space(ldflags))
 	end
 
 	exec:wait()

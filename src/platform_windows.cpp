@@ -75,7 +75,7 @@ void RawTask::_cancel_and_deinit_specifics(){
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 	this->_status.store(TaskStatus_Fault);
 	auto terminated = TerminateThread(specific->handle, 0) != 0;
-	// ensure(terminated, "Failed to kill thread");
+	ensure(terminated, "Failed to kill thread");
 	CloseHandle(specific->handle);
 }
 
