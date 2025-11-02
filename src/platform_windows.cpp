@@ -38,7 +38,12 @@ DWORD task_windows_wrapper(LPVOID arg){
 	
 void RawTask::_init_specifics_and_run(){
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
-	ensure(_status.load() == TaskStatus_Initialized, "Invalid task status");
+
+	if(_status.load() != TaskStatus_Initialized){
+		 // TODO: LOG: "Invalid task status";
+		_status.store(TaskStatus_Fault);
+		return;
+	}
 
 	DWORD id;
 	HANDLE handle = CreateThread(NULL, 0, task_windows_wrapper, (LPVOID)this, 0, &id);
@@ -62,10 +67,15 @@ void RawTask::_join_and_deinit_specifics(){
 }
 
 void RawTask::_cancel_and_deinit_specifics(){
+	auto status = this->_status.load(memory_order_relaxed);
+	if(status >= TaskStatus_Done){
+		return;
+	}
+
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 	this->_status.store(TaskStatus_Fault);
 	auto terminated = TerminateThread(specific->handle, 0) != 0;
-	ensure(terminated, "Failed to kill thread");
+	// ensure(terminated, "Failed to kill thread");
 	CloseHandle(specific->handle);
 }
 

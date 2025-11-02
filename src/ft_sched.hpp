@@ -431,7 +431,6 @@ void init_deadline_watcher(DeadlineWatcher* w, Slice<DeadlineSlot> slots);
 
 DeadlineWatcher* make_deadline_watcher(Arena* a, usize slot_count);
 
-
 #if 0
 struct TMR_Task {
 	Arena* arena = nullptr;

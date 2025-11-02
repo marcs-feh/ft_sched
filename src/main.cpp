@@ -116,14 +116,11 @@ struct TMR_Task {
 
 	static void _worker_wrapper(RawTask* t){
 		auto sub_task = (SubTask*)t->args;
-		printf("worker ENTER %d\n", t->id); fflush(stdout);
 		auto ctx = TaskContext { &sub_task->task };
 		sub_task->result = sub_task->func(ctx);
-		printf("worker EXIT %d\n", t->id); fflush(stdout);
 	}
 
 	static void _supervisor_wrapper(RawTask* t){
-		printf("supervisor ENTER\n"); fflush(stdout);
 		auto self = (TMR_Task<Output, TaskFunc, OnCancel>*)t->args;
 
 		for(int i = 0; i < 3; i ++){
@@ -132,14 +129,11 @@ struct TMR_Task {
 
 		while(self->watcher.count()){
 			auto ok = self->watcher.scan();
-			printf("TMR SCAN: %d\n", ok); fflush(stdout);
 			sleep_for(Duration::from_milli(1));
 		}
-		printf("supervisor EXIT\n"); fflush(stdout);
 	}
 
 	void run(){
-		printf("starting supervisor\n"); fflush(stdout);
 		supervisor.run();
 	}
 
@@ -205,9 +199,12 @@ void entrypoint(){
 	bool running = true;
 	auto watcher_task = make_basic_task(&main_arena, [watcher, &running](TaskContext){
 		while(running){
-			if(watcher->scan()){
+			auto ok = watcher->scan();
+			if(ok){
 				swdg::reset_watchdog();
 			}
+
+			printf("CHECK: %s\n", ok ? "OK" : "FAIL");fflush(stdout);
 
 			sleep_for(Duration::from_milli(1));
 		}
@@ -216,19 +213,26 @@ void entrypoint(){
 	});
 	watcher_task->run();
 
-	auto tmr = make_tmr_task(&main_arena, Duration::from_milli(100), [](TaskContext ctx){
-		sleep_for(Duration::from_milli(1500));
-		if(ctx.task->id == 3){
-			sleep_for(Duration::from_milli(4000));
-		}
-		printf("Hello, it's %d\n", ctx.task->id); fflush(stdout);
+	auto tmr0 = make_tmr_task(&main_arena, Duration::from_milli(100), [](TaskContext ctx){
+		printf("[TMR1] Hello, it's %d\n", ctx.task->id); fflush(stdout);
 		return Unit{};
 	});
-	tmr->run();
-	tmr->join();
+	watcher->watch(&tmr0->supervisor, Duration::from_milli(100));
 
-	watcher->watch(&tmr->supervisor, Duration::from_milli(400));
+	auto tmr1 = make_tmr_task(&main_arena, Duration::from_milli(100), [](TaskContext ctx){
+		printf("[TMR2] Hello, it's %d\n", ctx.task->id); fflush(stdout);
+		return Unit{};
+	});
+	watcher->watch(&tmr1->supervisor, Duration::from_milli(100));
 
+	// sleep_for(Duration::from_milli(800));
+
+	printf("START TASKS\n");
+	tmr0->run();
+	tmr1->run();
+
+	tmr0->join();
+	tmr1->join();
 }
 
 

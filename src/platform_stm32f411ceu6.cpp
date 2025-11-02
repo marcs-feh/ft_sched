@@ -38,11 +38,15 @@ void _freertos_task_wrapper(void* task_ptr){
 	task->_status.store(TaskStatus_Started);
 	task->func(task);
 	task->_status.store(TaskStatus_Done);
-	vTaskDelete(NULL);
+	vTaskDelete(NULL); // IMPORTANT: Self-Deinitialize task
 }
 
 void RawTask::_init_specifics_and_run(){
-	ensure(_status.load() == TaskStatus_Initialized, "Invalid task status");
+	if(_status.load() != TaskStatus_Initialized){
+		// TODO: log fail
+		_status.store(TaskStatus_Fault);
+		return;
+	}
 
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 
@@ -64,6 +68,20 @@ void RawTask::_join_and_deinit_specifics(){
 	while(status != TaskStatus_Fault && status != TaskStatus_Done){
 		osDelay(0); // TODO: Is this actually correct?
 	}
+}
+
+void RawTask::_cancel_and_deinit_specifics(){
+	unimplemented();
+	// auto status = this->_status.load(memory_order_relaxed);
+	// if(status >= TaskStatus_Done){
+	// 	return;
+	// }
+
+	// auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
+	// this->_status.store(TaskStatus_Fault);
+	// auto terminated = TerminateThread(specific->handle, 0) != 0;
+	// // ensure(terminated, "Failed to kill thread");
+	// CloseHandle(specific->handle);
 }
 
 void sleep_for(Duration d){

@@ -18,6 +18,7 @@ bool DeadlineWatcher::watch(RawTask* task, Duration limit){
 	
 	free_slot->task = task;
 	free_slot->limit = limit;
+	free_slot->last_tick = tick_now();
 	task->deadline = free_slot;
 	_count.fetch_add(1, memory_order_relaxed);
 
@@ -44,6 +45,7 @@ void DeadlineWatcher::clear(){
 }
 
 extern "C" int printf(cstring, ...);
+
 // Scan for deadline violations and remove Done tasks
 bool DeadlineWatcher::scan(){
 	auto guard = _lock.guard();
@@ -62,7 +64,14 @@ bool DeadlineWatcher::scan(){
 			continue;
 		}
 
-		if(tick_diff(now, slot.last_tick) > slot.limit){
+		auto elapsed = tick_diff(now, slot.last_tick);
+
+		// printf("CHECKING: %d NOW=%td LAST=%td E=%td MAX=%td\n", slot.task->id,
+		// 	tick_diff(now, 0).to_milli(), tick_diff(slot.last_tick, 0).to_milli(),
+		// 	elapsed.to_milli(), slot.limit.to_milli()
+		// ); fflush(stdout);
+
+		if(elapsed > slot.limit){
 			printf("DEADLINE VIOLATION ON TASK %d\n", slot.task->id);
 			slot.task->cancel();
 			ok = false;
