@@ -7,7 +7,7 @@ import os
 from datetime import datetime
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Generator
 
 from pyocd.core.helpers import ConnectHelper
 from pyocd.core.target import Target
@@ -19,7 +19,7 @@ from elftools.elf.sections import SymbolTableSection
 @dataclass
 class Symbol:
     name : str
-    address : str
+    address : int
     size : int
     type : Any
 
@@ -78,7 +78,7 @@ class STM32Connection:
             result.append(self.symbols[symbol_name])
         return result
 
-    def set_breakpoint_at_line(self, source_file, line_number):
+    def set_breakpoint_at_line(self, source_file: str, line_number: int) -> int | None:
         """
         Set a hardware breakpoint at a specific source file and line
             
@@ -137,7 +137,7 @@ class STM32Connection:
             print(f"  Failed to set breakpoint: {e}")
             return None
 
-    def remove_breakpoint(self, bp_id):
+    def remove_breakpoint(self, bp_id) -> None:
         """
         Remove a breakpoint by ID
         
@@ -155,7 +155,7 @@ class STM32Connection:
         except Exception as e:
             print(f"Failed to remove breakpoint: {e}")
     
-    def clear_all_breakpoints(self):
+    def clear_all_breakpoints(self) -> None:
         """Remove all breakpoints"""
         try:
             for bp_id in list(self.breakpoints.keys()):
@@ -164,7 +164,7 @@ class STM32Connection:
         except Exception as e:
             print(f"Failed to clear breakpoints: {e}")
     
-    def wait_for_breakpoint(self, timeout_ms=20000):
+    def wait_for_breakpoint(self, timeout_ms: int=20000) -> bool:
         """
         Wait for target to hit a breakpoint
         
@@ -174,8 +174,6 @@ class STM32Connection:
         Returns:
             True if breakpoint hit, False if timeout
         """
-        import time
-        
         try:
             # Resume execution
             self.target.resume()
@@ -199,7 +197,7 @@ class STM32Connection:
         except Exception as e:
             print(f"Error waiting for breakpoint: {e}")
             return False
-    def run_until_line(self, source_file, line_number, timeout_ms=5000):
+    def run_until_line(self, source_file: str, line_number: int, timeout_ms: int=5000) -> bool:
         """
         Set a temporary breakpoint and run until it's hit
         
@@ -221,7 +219,7 @@ class STM32Connection:
         return result
 
     
-    def read_memory_u32(self, address: int, count = 1):
+    def read_memory_u32(self, address: int, count: int = 1):
         """
         Read 32-bit words from memory
         
@@ -266,12 +264,12 @@ class STM32Connection:
         Returns:
             List of values read from memory
         """
-        sym = self.find_symbol(symbol_name)
-        if not sym:
+        sym = self.get_symbol(symbol_name)
+        if sym is None:
             return None
         
-        address = sym['address']
-        size = sym['size']
+        address = sym.address
+        size = sym.size
         
         # Determine how many 32-bit words to read
         num_words = (size + 3) // 4
@@ -299,7 +297,9 @@ class STM32Connection:
         """
         try:
             # Read current value
-            original_value = self.read_memory_u32(address, 1)[0]
+            original_value = self.read_memory_u32(address, 1)
+            if original_value is not None:
+                original_value = original_value[0]
             print(f"Original value at 0x{address:08X}: 0x{original_value:08X}")
             
             # Flip the specified bit
@@ -310,7 +310,9 @@ class STM32Connection:
             self.write_memory_u32(address, [corrupted_value])
             
             # Verify the injection
-            verify_value = self.read_memory_u32(address, 1)[0]
+            verify_value = self.read_memory_u32(address, 1)
+            if verify_value is not None:
+                verify_value = verify_value[0]
             print(f"Verified value: 0x{verify_value:08X}")
             
             return original_value, corrupted_value
@@ -331,11 +333,11 @@ class STM32Connection:
         Returns:
             Tuple of (original_value, corrupted_value)
         """
-        sym = self.find_symbol(symbol_name)
+        sym = self.get_symbol(symbol_name)
         if not sym:
             return None, None
         
-        target_address = sym['address'] + offset
+        target_address = sym.address + offset
         
         if bit_position is None:
             bit_position = random.randint(0, 31)
@@ -360,13 +362,13 @@ class STM32Connection:
         Returns:
             Dictionary with arena fields
         """
-        sym = self.find_symbol(arena_symbol)
+        sym = self.get_symbol(arena_symbol)
         if not sym:
             return None
         
         try:
             # Read 5 words
-            data = self.read_memory_u32(sym['address'], 5)
+            data = self.read_memory_u32(sym.address, 5)
             
             if not data:
                 return None
@@ -379,7 +381,7 @@ class STM32Connection:
                 'region_count': struct.unpack('i', data[4].to_bytes(4, 'little'))[0]  # signed int
             }
             
-            print(f"\nArena '{arena_symbol}' at 0x{sym['address']:08X}:")
+            print(f"\nArena '{arena_symbol}' at 0x{sym.address:08X}:")
             print(f"  data:            0x{arena_data['data']:08X}")
             
             if arena_data['capacity'] > 0:
@@ -567,7 +569,7 @@ class STM32FaultInjector:
             self.load_symbols(elf_path)
             self.load_line_info(elf_path)
     
-    def load_symbols(self, elf_path) -> bool:
+    def load_symbols(self, elf_path: str) -> bool:
         """
         Parse ELF file and extract symbol table
         
@@ -610,7 +612,7 @@ class STM32FaultInjector:
             return False
     
     @contextmanager
-    def connect(self) -> STM32Connection:
+    def connect(self) -> Generator[STM32Connection]:
         """
         Establish connection to the target MCU via ST-Link
         
@@ -629,8 +631,10 @@ class STM32FaultInjector:
                 }
             )
             
+            assert session is not None
             session.open()
             target = session.target
+            assert target is not None
             
             print(f"  Connected to {target.part_number} | {target.get_state()}")
             
@@ -656,7 +660,7 @@ class STM32FaultInjector:
                 session.close()
                 print("\nDisconnected from target")
 
-    def load_line_info(self, elf_path: str):
+    def load_line_info(self, elf_path: str) -> bool:
         """
         Parse ELF file and extract line number information (DWARF debug info)
         
@@ -744,7 +748,7 @@ class STM32FaultInjector:
         
         return source_files 
 
-def main():
+def main() -> None:
     injector = STM32FaultInjector(
         target_type='stm32f411ceux',
         elf_path='../stm32/build/stm32.elf'
