@@ -2,6 +2,7 @@ import time
 import random
 import struct
 import csv
+import os
 
 from datetime import datetime
 from contextlib import contextmanager
@@ -22,13 +23,24 @@ class Symbol:
     size : int
     type : Any
 
+ELF_TYPENAME_CONV = {
+    'STT_NOTYPE': None,
+    'STT_OBJECT': 'Object',
+    'STT_FUNC': 'Func',
+    'STT_SECTION': 'Section',
+    'STT_FILE': 'File',
+    'STT_COMMON': 'Common',
+}
+
 class STM32Connection:
     """Active connection to STM32 target via ST-Link"""
     
-    def __init__(self, session, target, symbols) -> None:
+    def __init__(self, session, target, symbols, line_info) -> None:
         self.session = session
         self.target = target
         self.symbols = symbols
+        self.line_info = line_info
+        self.breakpoints = {}
     
     def __enter__(self):
         return self
@@ -36,37 +48,20 @@ class STM32Connection:
     def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
         if self.session:
             self.session.close()
-            print("\nDisconnected from target")
+            print("[Disconnect]")
         return False
     
-    def find_symbol(self, symbol_name) -> Symbol | None:
+    def get_symbol(self, symbol_name) -> Symbol | None:
         """
-        Find a symbol by name
-        
-        Args:
-            symbol_name: Name of the symbol to find
-            
-        Returns:
-            Dictionary with address, size, and type, or None if not found
+        Get a symbol by name
         """
-        if symbol_name in self.symbols:
+        try:
             sym = self.symbols[symbol_name]
-            print(f"Symbol '{symbol_name}' found:")
-            print(f"  Address: 0x{sym['address']:08X}")
-            print(f"  Size: {sym['size']} bytes")
-            print(f"  Type: {sym['type']}")
             return sym
-        else:
-            print(f"Symbol '{symbol_name}' not found")
-            # Search for partial matches
-            matches = [s for s in self.symbols.keys() if symbol_name.lower() in s.lower()]
-            if matches:
-                print(f"Did you mean one of these?")
-                for match in matches[:5]:
-                    print(f"  - {match}")
+        except KeyError:
             return None
     
-    def list_symbols(self, pattern: str) -> list[Symbol]:
+    def list_symbols(self, pattern: str = '') -> list[Symbol]:
         """
         List all symbols, optionally filtered by pattern
         
@@ -74,16 +69,159 @@ class STM32Connection:
             pattern: Symbol name substring
         """
         matching = self.symbols.keys()
-        matching = [s for s in matching if pattern.lower() in s.lower()]
+        if pattern:
+            matching = [s for s in matching if pattern.lower() in s.lower()]
         
         result = []
 
-        for symbol_name in sorted(matching)[:20]:
+        for symbol_name in sorted(matching):
             result.append(self.symbols[symbol_name])
         return result
 
+    def set_breakpoint_at_line(self, source_file, line_number):
+        """
+        Set a hardware breakpoint at a specific source file and line
+            
+        Returns:
+            Breakpoint address if successful, None otherwise
+        """
+
+        source_file_normalized = os.path.normpath(source_file).replace('\\', '/')
+        
+        matching_addresses = []
+        for (file_path, line), address in self.line_info.items():
+            file_normalized = os.path.normpath(file_path).replace('\\', '/')
+
+            if (file_normalized.endswith(source_file_normalized) or 
+                source_file_normalized in file_normalized):
+                if line == line_number:
+                    matching_addresses.append((file_path, address))
+        
+        if not matching_addresses:
+            print(f"  No address found for {source_file}:{line_number}")
+            print(f"  Searching for similar files...")
+            
+            # Try to find similar file names
+            similar_files = set()
+            for (file_path, _), _ in self.line_info.items():
+                if source_file.lower() in file_path.lower():
+                    similar_files.add(file_path)
+            
+            if similar_files:
+                print("  Did you mean one of these files?")
+                for f in list(similar_files)[:5]:
+                    print(f"    - {f}")
+            
+            return None
+        
+        # Use the first matching address
+        file_path, address = matching_addresses[0]
+        
+        if len(matching_addresses) > 1:
+            print(f"  Warning: Multiple addresses found for {source_file}:{line_number}")
+            print(f"  Using first match: 0x{address:08X}")
+        
+        try:
+            # Set hardware breakpoint
+            bp = self.target.set_breakpoint(address)
+            bp_id = id(bp)  # Use object id as breakpoint identifier
+            self.breakpoints[bp_id] = address
+            
+            print(f"Breakpoint set at {file_path}:{line_number}")
+            print(f"  Address: 0x{address:08X}")
+            print(f"  Breakpoint ID: {bp_id}")
+            
+            return address
+            
+        except Exception as e:
+            print(f"  Failed to set breakpoint: {e}")
+            return None
+
+    def remove_breakpoint(self, bp_id):
+        """
+        Remove a breakpoint by ID
+        
+        Args:
+            bp_id: Breakpoint ID returned by set_breakpoint_at_line
+        """
+        try:
+            if bp_id in self.breakpoints:
+                address = self.breakpoints[bp_id]
+                self.target.remove_breakpoint(address)
+                del self.breakpoints[bp_id]
+                print(f"Removed breakpoint at 0x{address:08X}")
+            else:
+                print(f"Breakpoint ID {bp_id} not found")
+        except Exception as e:
+            print(f"Failed to remove breakpoint: {e}")
     
-    def read_memory_u32(self, address, count: int=1):
+    def clear_all_breakpoints(self):
+        """Remove all breakpoints"""
+        try:
+            for bp_id in list(self.breakpoints.keys()):
+                self.remove_breakpoint(bp_id)
+            print("All breakpoints cleared")
+        except Exception as e:
+            print(f"Failed to clear breakpoints: {e}")
+    
+    def wait_for_breakpoint(self, timeout_ms=20000):
+        """
+        Wait for target to hit a breakpoint
+        
+        Args:
+            timeout_ms: Timeout in milliseconds
+            
+        Returns:
+            True if breakpoint hit, False if timeout
+        """
+        import time
+        
+        try:
+            # Resume execution
+            self.target.resume()
+            
+            # Wait for halt with timeout
+            start_time = time.time()
+            while True:
+                if self.target.get_state() == Target.State.HALTED:
+                    pc = self.target.read_core_register('pc')
+                    print(f"Breakpoint hit! PC = 0x{pc:08X}")
+                    return True
+                
+                elapsed_ms = (time.time() - start_time) * 1000
+                if elapsed_ms > timeout_ms:
+                    print(f"Timeout waiting for breakpoint ({timeout_ms}ms)")
+                    self.target.halt()
+                    return False
+                
+                time.sleep(0.01)  # Poll every 10ms
+                
+        except Exception as e:
+            print(f"Error waiting for breakpoint: {e}")
+            return False
+    def run_until_line(self, source_file, line_number, timeout_ms=5000):
+        """
+        Set a temporary breakpoint and run until it's hit
+        
+        Args:
+            source_file: Source file name
+            line_number: Line number
+            timeout_ms: Timeout in milliseconds
+            
+        Returns:
+            True if reached the line, False otherwise
+        """
+        address = self.set_breakpoint_at_line(source_file, line_number)
+        if not address:
+            return False
+        
+        result = self.wait_for_breakpoint(timeout_ms)
+        
+        # Note: Breakpoint remains set, call clear_all_breakpoints() to remove
+        return result
+
+    
+    def read_memory_u32(self, address: int, count = 1):
         """
         Read 32-bit words from memory
         
@@ -412,7 +550,7 @@ class STM32Connection:
 class STM32FaultInjector:
     """Fault injector for STM32 microcontrollers using PyOCD and ST-Link"""
     
-    def __init__(self, target_type: str='stm32f411ceu6', elf_path=None) -> None:
+    def __init__(self, target_type: str, elf_path: str) -> None:
         """
         Initialize fault injector for STM32
         
@@ -423,9 +561,11 @@ class STM32FaultInjector:
         self.target_type = target_type
         self.elf_path = elf_path
         self.symbols = {}
-        
+        self.line_info = {}
+
         if elf_path:
             self.load_symbols(elf_path)
+            self.load_line_info(elf_path)
     
     def load_symbols(self, elf_path) -> bool:
         """
@@ -449,11 +589,17 @@ class STM32FaultInjector:
                     if isinstance(section, SymbolTableSection):
                         for symbol in section.iter_symbols():
                             if symbol.name and symbol['st_value'] != 0:
+                                sym_type = symbol['st_info']['type']
+                                try:
+                                    sym_type = ELF_TYPENAME_CONV[sym_type]
+                                except KeyError:
+                                    sym_type = 'Unknown'
+
                                 self.symbols[symbol.name] = Symbol(
                                     address = symbol['st_value'],
                                     size = symbol['st_size'],
-                                    type = symbol['st_info']['type'],
-                                    name = symbol.name
+                                    type = sym_type,
+                                    name = symbol.name,
                                 )
                 
                 print(f"  Loaded {len(self.symbols)} symbols")
@@ -494,7 +640,7 @@ class STM32FaultInjector:
                 print("  Target halted")
             
             # Yield the connection object
-            yield STM32Connection(session, target, self.symbols)
+            yield STM32Connection(session, target, self.symbols, self.line_info)
             
         except Exception as e:
             print(f"  Connection failed: {e}")
@@ -510,24 +656,112 @@ class STM32FaultInjector:
                 session.close()
                 print("\nDisconnected from target")
 
+    def load_line_info(self, elf_path: str):
+        """
+        Parse ELF file and extract line number information (DWARF debug info)
+        
+        Args:
+            elf_path: Path to the .elf file
+        """
+        print(f"[Loading line info]")
+        
+        try:
+            with open(elf_path, 'rb') as f:
+                print(f"  Loading {elf_path}")
+                elf = ELFFile(f)
+                
+                if not elf.has_dwarf_info():
+                    print("  Warning: ELF file has no DWARF debug info")
+                    return False
+                
+                dwarf_info = elf.get_dwarf_info()
+                
+                # Iterate through all compilation units
+                for CU in dwarf_info.iter_CUs():
+                    # Get the line program for this CU
+                    line_program = dwarf_info.line_program_for_CU(CU)
+                    if line_program is None:
+                        continue
+                    
+                    for entry in line_program.get_entries():
+                        if entry.state is None:
+                            continue
+                        
+                        # Store mapping from (file, line) to address
+                        file_entry = line_program['file_entry'][entry.state.file - 1]
+                        file_name = file_entry.name.decode('utf-8', errors='ignore')
+                        
+                        # Get directory if available
+                        if file_entry.dir_index != 0:
+                            dir_entry = line_program['include_directory'][file_entry.dir_index - 1]
+                            dir_name = dir_entry.decode('utf-8', errors='ignore')
+                            full_path = f"{dir_name}/{file_name}"
+                        else:
+                            full_path = file_name
+                        
+                        line = entry.state.line
+                        address = entry.state.address
+                        
+                        if address > 0:
+                            self.line_info[(full_path, line)] = address
+                
+                print(f"Loaded {len(self.line_info)} line entries")
+                return True
+                
+        except Exception as e:
+            print(f"  Failed to load line info: {e}")
+            return False
 
-# Example usage
-if __name__ == "__main__":
-    # Create fault injector with ELF file
+    def list_source_files(self, pattern=None):
+        """
+        List all source files found in the ELF debug info
+        
+        Args:
+            pattern: Optional string to filter file names
+            
+        Returns:
+            List of unique source file paths
+        """
+        if not self.line_info:
+            print("No line information loaded. Make sure ELF was compiled with -g")
+            return []
+        
+        # Extract unique file paths
+        source_files = set()
+        for (file_path, _), _ in self.line_info.items():
+            source_files.add(file_path)
+        
+        # Filter if pattern provided
+        if pattern:
+            source_files = {f for f in source_files if pattern.lower() in f.lower()}
+        
+        # Sort for consistent output
+        source_files = sorted(source_files)
+        
+        print(f"\nFound {len(source_files)} source files" + (f" matching '{pattern}'" if pattern else ""))
+        for i, file_path in enumerate(source_files, 1):
+            print(f"  {i:3d}. {file_path}")
+        
+        return source_files 
+
+def main():
     injector = STM32FaultInjector(
         target_type='stm32f411ceux',
         elf_path='../stm32/build/stm32.elf'
     )
     
-    # Use context manager for connection
     with injector.connect() as conn:
-        print("[Finding Arena Symbols]")
-        symbols = conn.list_symbols('arena')
-        for sym in symbols:
-            print(f"  {sym.name:60s} {sym.type} @ 0x{sym.address:08X} ({sym.size} bytes)")
+        print("[Reset Target]")
+        conn.reset(halt=True)
 
-        print(conn.symbols['main_arena'])
-        
+        symbols = conn.list_symbols()
+        injector.list_source_files()
+
+        conn.run_until_line('main.cpp', 132)
+
+
+if __name__ == "__main__":
+    main()
         # Example 2: Dump arena structure
         # print("\n" + "="*60)
         # print("\nExample 2: Dump Arena State")
@@ -557,7 +791,3 @@ if __name__ == "__main__":
         # )
         
         # # Example 5: Reset and resume
-        print("[Reset Target]")
-        conn.reset(halt=True)
-    
-    print("\nDone")
