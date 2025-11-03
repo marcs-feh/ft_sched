@@ -217,12 +217,12 @@ void ensure(bool pred, char const* msg, CALLER_LOCATION){
 	ensure_ex(pred, msg, caller_location.file_name(), caller_location.line());
 }
 
-static inline
+[[noreturn]] static inline
 void panic(char const* msg, CALLER_LOCATION){
 	panic_ex(msg, caller_location.file_name(), caller_location.line());
 }
 
-static inline
+[[noreturn]] static inline
 void unimplemented(CALLER_LOCATION){
 	panic_ex("Unimplemented", caller_location.file_name(), caller_location.line());
 }
@@ -428,6 +428,7 @@ struct Array {
 	Slice<T> slice(){
 		return Slice<T>(&_v[0], N);
 	}
+
 
 	// Macro tricks to generate all operators
 	#define ELEM_WISE_OP(op, ret) constexpr auto operator op (Array<T, N> const& x) const { \

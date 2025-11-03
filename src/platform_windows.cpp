@@ -5,8 +5,8 @@
 
 //// Base platform specifics
 extern "C" {
-	void abort();
-	#include <stdio.h>
+void abort();
+#include <stdio.h>
 }
 
 void error_write(cstring msg){
@@ -21,9 +21,11 @@ void trap(){
 
 //// FT_Sched platform specifics
 struct RawTaskPlatformSpecific {
-	HANDLE handle;
+	Atomic<HANDLE> handle;
 	DWORD id;
 };
+
+static_assert(Atomic<HANDLE>::is_always_lock_free, "Atomic handle is not lock free");
 
 static
 DWORD task_windows_wrapper(LPVOID arg){
@@ -35,48 +37,82 @@ DWORD task_windows_wrapper(LPVOID arg){
 	task->_status.store(TaskStatus_Done);
 	return 0;
 }
-	
-void RawTask::_init_specifics_and_run(){
+
+bool RawTask::_platform_init(Arena*, usize stack_size, RawTaskFunc, void*){
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 
+	constexpr usize min_stack_size = 64 * 1024;
+
 	if(_status.load() != TaskStatus_Initialized){
-		 // TODO: LOG: "Invalid task status";
+		// TODO: LOG: "Invalid task status";
 		_status.store(TaskStatus_Fault);
-		return;
+		return false;
 	}
 
 	DWORD id;
-	HANDLE handle = CreateThread(NULL, 0, task_windows_wrapper, (LPVOID)this, 0, &id);
-	ensure(handle != NULL, "Failed to create thread");
-	specific->handle = handle;
+	HANDLE handle = CreateThread(NULL, max(min_stack_size, stack_size), task_windows_wrapper, (LPVOID)this, 0, &id);
+	specific->handle.store(handle, memory_order_seq_cst);
+
+	if(handle == NULL){
+		return false;
+	}
+	return true;
 }
 
-void RawTask::_join_and_deinit_specifics(){
+bool RawTask::_platform_join(){
 	auto status = this->_status.load();
-	if(status >= TaskStatus_Done){
-		return;
+	if(status == TaskStatus_Fault){
+		return false;
 	}
 
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
+
+	if(status >= TaskStatus_Done && specific->handle == NULL){
+		// Already joined
+		return true;
+	}
+
 	DWORD ret = WaitForSingleObject(specific->handle, INFINITE);
-	ensure(ret != WAIT_FAILED, "failed to join");
+
+	if(ret == WAIT_FAILED){
+		panic("wait failed");
+		return false;
+	}
 
 	status = this->_status.load();
 	ensure(status >= TaskStatus_Done, "Invalid task status");
-	CloseHandle(specific->handle);
+
+	auto closed = CloseHandle(specific->handle);
+	if(!closed){
+		panic("close failed");
+		return false;
+	}
+
+	specific->handle.store(NULL, memory_order_seq_cst);
+
+	return true;
 }
 
-void RawTask::_cancel_and_deinit_specifics(){
+bool RawTask::_platform_cancel(){
 	auto status = this->_status.load(memory_order_relaxed);
 	if(status >= TaskStatus_Done){
-		return;
+		return false;
 	}
 
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 	this->_status.store(TaskStatus_Fault);
 	auto terminated = TerminateThread(specific->handle, 0) != 0;
-	ensure(terminated, "Failed to kill thread");
-	CloseHandle(specific->handle);
+	if(!terminated){
+		return false;
+	}
+	auto closed = CloseHandle(specific->handle) != 0;
+	if(!closed){
+		return false;
+	}
+
+	specific->handle = NULL;
+
+	return true;
 }
 
 static_assert(sizeof(RawTaskPlatformSpecific) <= sizeof(RawTaskPlatformSpecificData), "Platform specific struct has insufficient size");
@@ -97,9 +133,9 @@ TimeTick tick_now(){
 usize tick_frequency(){
 	if(!_tick_frequency){
 		LARGE_INTEGER f{};
-	    if(!QueryPerformanceFrequency(&f)){
-	    	panic("Failed to get frequency");
-	    }
+		if(!QueryPerformanceFrequency(&f)){
+			panic("Failed to get frequency");
+		}
 
 		_tick_frequency = f.QuadPart;
 		ensure((_tick_frequency / Duration::scale) > 0, "Tick frequency is too low to be accurately represented");

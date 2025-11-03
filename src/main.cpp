@@ -26,16 +26,6 @@ void print_slice(Slice<T> slice, char const* elem_fmt){
 	} printf("]\n");
 }
 
-void print_info(){
-	u8 bufdata[48];
-	auto buf = Slice<u8>(&bufdata[0], sizeof(bufdata));
-	String msg;
-
-	msg = buffer_printf(buf, "Address Width:  %zu-bit", sizeof(void*) * 8); puts(msg.data);
-	msg = buffer_printf(buf, "Tick Frequency: %tu Hz", tick_frequency()); puts(msg.data);
-	msg = buffer_printf(buf, "RawTask size:   %td", sizeof(RawTask)); puts(msg.data);
-}
-
 template<typename T>
 using ConsensusFunc = bool (*)(T const&, T const&);
 
@@ -58,57 +48,75 @@ constexpr auto default_consensus_func = [](T const& a, T const& b) -> bool {
 	return a == b;
 };
 
-Arena main_arena;
+Arena task_arena{};
+Arena main_arena{};
+
+constexpr usize max_task_count = 10;
+constexpr usize average_stack_size = 200 * sizeof(usize);
+constexpr usize task_arena_size = (max_task_count * average_stack_size) + 1024;
+
+u8 task_arena_memory[task_arena_size];
+
 constexpr usize main_arena_size = 4096;
 u8 main_arena_memory[main_arena_size];
 
+void print_info(){
+	static u8 bufdata[50];
+	auto buf = Slice<u8>(&bufdata[0], sizeof(bufdata));
+	String msg;
+
+	msg = buffer_printf(buf, "[System Info]"); puts(msg.data);
+	msg = buffer_printf(buf, "  Task Arena Size: %zuB", task_arena_size); puts(msg.data);
+	msg = buffer_printf(buf, "  Address Width:   %zu-bit", sizeof(void*) * 8); puts(msg.data);
+	msg = buffer_printf(buf, "  Tick Frequency:  %tu Hz", tick_frequency()); puts(msg.data);
+	msg = buffer_printf(buf, "  RawTask size:    %td", sizeof(RawTask)); puts(msg.data);
+}
+
 attribute_force_inline static inline
 void entrypoint(){
-	// swdg::init(Duration::from_milli(1'000));
-
 	#if defined(FT_SCHED_PLATFORM_STM32F411CEU6)
 	for(int i = 5; i > 0; i --){
 		sleep_for(Duration::from_milli(1'000)); printf("%d\r\n", i); fflush(stdout);
 	}
+	#else
+	swdg_init(Duration::from_milli(1'000));
 	#endif
 
-	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
+	print_info();
 
-	DeadlineWatcher* watcher = make_deadline_watcher(&main_arena, 32);
+	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
+	task_arena = arena_from_buffer({&task_arena_memory[0], task_arena_size});
+
+	DeadlineWatcher* watcher = make_deadline_watcher(&task_arena, 32);
 
 	bool running = true;
-//	auto watcher_task = make_basic_task(&main_arena, [watcher, &running](TaskContext){
-//		while(running){
-//			auto ok = watcher->scan();
-//			if(ok){
-//				swdg::reset_watchdog();
-//			}
-//			// printf("CHECK: %s\n", ok ? "OK" : "FAIL");fflush(stdout);
-//
-//			sleep_for(Duration::from_milli(1));
-//		}
-//
-//		return Unit{};
-//	});
-//	watcher_task->run();
+	auto watcher_task = make_basic_task(&task_arena, [watcher, &running](TaskContext){
+		while(running){
+			auto ok = watcher->scan();
+			if(ok){
+				swdg_reset();
+			}
+			// printf("CHECK: %s\n", ok ? "OK" : "FAIL");fflush(stdout);
 
-	// auto tmr0 = make_tmr_task(&main_arena, Duration::from_milli(33), [](TaskContext ctx){
-	// 	if(ctx.id() == 6)
-	// 		ctx.task->cancel();
+			sleep_for(Duration::from_milli(1));
+		}
 
-	// 	printf("[TMR1] Hello, it's %d\n", ctx.task->id); fflush(stdout);
-	// 	return 69;
-	// });
-	// printf("SPAWNED: %d\n", tmr0->supervisor.id);
+		return Unit{};
+	});
 
-	auto t = make_basic_task(&main_arena, [](TaskContext ctx){
-		auto inner = make_basic_task(&main_arena, [](TaskContext ctx){
-			printf("[INNER] Hello %d\r\n", int(ctx.id()));
+	auto t = make_basic_task(&task_arena, [](TaskContext ctx){
+		auto inner1 = make_basic_task(&main_arena, [](TaskContext ctx){
+			printf("[INNER 1] Hello %d\r\n", int(ctx.id()));
 			return Unit{};
 		});
 
-		inner->run();
-		inner->join();
+		auto inner2 = make_basic_task(&task_arena, [](TaskContext ctx){
+			printf("[INNER 2] Hello %d\r\n", int(ctx.id()));
+			return Unit{};
+		});
+
+		inner1->join();
+		inner2->join();
 
 		printf("[OUTER] Hello %d\r\n", int(ctx.id()));
 		fflush(stdout);
@@ -116,16 +124,9 @@ void entrypoint(){
 		return Unit{};
 	});
 
-	t->run();
 	t->join();
 	fflush(stdout);
 
-	// tmr0->run();
-	// tmr0->join();
-	// printf("RESULT: %d\n", tmr0->result().unwrap());
-
-	// char anim[] = {'-', '\\', '|', '/'};
-	// u8 anim_frame = 0;
 	printf("--- ENTRYPOINT END ---\r\n");
 
 	while(1){

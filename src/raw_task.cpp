@@ -7,29 +7,36 @@ u32 next_raw_task_id(){
 }
 
 // TODO: use a sub-arena to avoid ownership issues
-void init_raw_task(RawTask* task, Arena* a, usize stack_size, RawTaskFunc func, void* args){
+bool init_raw_task(RawTask* task, Arena* a, usize stack_size, RawTaskFunc func, void* args){
 	ensure(task != nullptr, "Must be non-null");
 
+	auto restore = a->offset;
 	task->func = func;
 	task->arena = a;
-	task->stack_size = stack_size;
-	task->_status.store(TaskStatus_Initialized);
 	task->args = args;
 	task->id = next_raw_task_id();
+	task->stack_size = stack_size;
+
+		task->_status.store(TaskStatus_Initialized);
+
+	auto ok = task->_platform_init(a, stack_size, func, args);
+	if(!ok){
+		a->offset = restore;
+	}
+	return ok;
+
 }
 
-void init_raw_task(RawTask* task, Arena* a, RawTaskFunc func, void* args){
-	init_raw_task(task, a, 0, func, args);
-}
-
-RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args){
+RawTask* make_raw_task(Arena* a, usize stack_size, RawTaskFunc func, void* args){
+	auto restore = a->offset;
 	auto task = make<RawTask>(a);
 
-	if(task){
-		init_raw_task(task, a, func, args);
+	if(task && init_raw_task(task, a, stack_size, func, args)){
+		return task;
 	}
 
-	return task;
+	a->offset = restore;
+	return nullptr;
 }
 
 // bool init_tmr_task(TMR_Task* task, Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args){
