@@ -762,6 +762,7 @@ def main() -> None:
         injector.list_source_files()
 
         conn.run_until_line('main.cpp', 132)
+        conn.resume()
 
 
 if __name__ == "__main__":
