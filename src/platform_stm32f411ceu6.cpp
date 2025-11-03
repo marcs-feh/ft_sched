@@ -42,12 +42,12 @@ void _freertos_task_wrapper(void* task_ptr){
 	auto specific = (RawTaskPlatformSpecific*)(&task->_specific);
 
 	task->_status.store(TaskStatus_Started);
-	printf("ENTER TASK %d\r\n", int(task->id));
+	// printf("ENTER TASK %d\r\n", int(task->id));
 	task->func(task);
-	printf("FINISH TASK %d\r\n", int(task->id));
+	// printf("FINISH TASK %d\r\n", int(task->id));
 	task->_status.store(TaskStatus_Done);
 
-	/* Yield spin */
+	/* IMPORTANT: Yield spin */
 	while(1){
 		taskYIELD();
 	}
@@ -122,7 +122,7 @@ bool RawTask::_platform_join(){
 	return true;
 }
 
-void RawTask::_platform_cancel(){
+bool RawTask::_platform_cancel(){
 	unimplemented();
 }
 

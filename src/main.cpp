@@ -65,11 +65,11 @@ void print_info(){
 	auto buf = Slice<u8>(&bufdata[0], sizeof(bufdata));
 	String msg;
 
-	msg = buffer_printf(buf, "[System Info]"); puts(msg.data);
-	msg = buffer_printf(buf, "  Task Arena Size: %zuB", task_arena_size); puts(msg.data);
-	msg = buffer_printf(buf, "  Address Width:   %zu-bit", sizeof(void*) * 8); puts(msg.data);
-	msg = buffer_printf(buf, "  Tick Frequency:  %tu Hz", tick_frequency()); puts(msg.data);
-	msg = buffer_printf(buf, "  RawTask size:    %td", sizeof(RawTask)); puts(msg.data);
+	msg = buffer_printf(buf, "[System Info]"); printf("%s\r\n", msg.data);
+	msg = buffer_printf(buf, "  Task Arena Size: %zuB", task_arena_size); printf("%s\r\n", msg.data);
+	msg = buffer_printf(buf, "  Address Width:   %zu-bit", sizeof(void*) * 8); printf("%s\r\n", msg.data);
+	msg = buffer_printf(buf, "  Tick Frequency:  %tu Hz", tick_frequency()); printf("%s\r\n", msg.data);
+	msg = buffer_printf(buf, "  RawTask size:    %td", sizeof(RawTask)); printf("%s\r\n", msg.data);
 }
 
 attribute_force_inline static inline
@@ -80,6 +80,19 @@ void entrypoint(){
 	}
 	#else
 	swdg_init(Duration::from_milli(1'000));
+	DeadlineWatcher* watcher = make_deadline_watcher(&task_arena, 32);
+	auto watcher_task = make_basic_task(&task_arena, [watcher, &running](TaskContext){
+		while(running){
+			auto ok = watcher->scan();
+			if(ok){
+				swdg_reset();
+			}
+
+			sleep_for(Duration::from_milli(1));
+		}
+
+		return Unit{};
+	});
 	#endif
 
 	print_info();
@@ -87,47 +100,41 @@ void entrypoint(){
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
 	task_arena = arena_from_buffer({&task_arena_memory[0], task_arena_size});
 
-	DeadlineWatcher* watcher = make_deadline_watcher(&task_arena, 32);
 
-	bool running = true;
-	auto watcher_task = make_basic_task(&task_arena, [watcher, &running](TaskContext){
-		while(running){
-			auto ok = watcher->scan();
-			if(ok){
-				swdg_reset();
-			}
-			// printf("CHECK: %s\n", ok ? "OK" : "FAIL");fflush(stdout);
+	auto queue = make_spsc_queue<i32>(&main_arena, 32);
 
-			sleep_for(Duration::from_milli(1));
+	bool tasks_running = true;
+	auto producer = make_basic_task(&task_arena, [&tasks_running, queue](TaskContext ctx){
+		int n = 0;
+		while(tasks_running){
+			queue->try_push(n);
+			n += 1;
+			sleep_for(Duration::from_milli(100));
 		}
 
 		return Unit{};
 	});
 
-	auto t = make_basic_task(&task_arena, [](TaskContext ctx){
-		auto inner1 = make_basic_task(&main_arena, [](TaskContext ctx){
-			printf("[INNER 1] Hello %d\r\n", int(ctx.id()));
-			return Unit{};
-		});
+	auto consumer = make_basic_task(&task_arena, [&tasks_running, queue](TaskContext ctx){
+		while(tasks_running){
+			auto p = queue->pop();
 
-		auto inner2 = make_basic_task(&task_arena, [](TaskContext ctx){
-			printf("[INNER 2] Hello %d\r\n", int(ctx.id()));
-			return Unit{};
-		});
+			if(p){
+				printf("%d\r\n", 2 * p.unwrap());
+			}
+			else {
+				printf("-\r\n");
+			}
 
-		inner1->join();
-		inner2->join();
 
-		printf("[OUTER] Hello %d\r\n", int(ctx.id()));
-		fflush(stdout);
+			sleep_for(Duration::from_milli(50));
+		}
 
 		return Unit{};
 	});
 
-	t->join();
+	printf("----- FINISHED -----\r\n");
 	fflush(stdout);
-
-	printf("--- ENTRYPOINT END ---\r\n");
 
 	while(1){
 		#if !defined(FT_SCHED_NO_MAIN)

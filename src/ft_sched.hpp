@@ -138,10 +138,6 @@ struct RawTask {
 		return _status;
 	}
 
-	void fault() {
-		_status.store(TaskStatus_Fault);
-	}
-
 	void join(CALLER_LOCATION) {
 		auto ok = _platform_join();
 		ensure(ok, "Failed to join thread", caller_location);
@@ -149,7 +145,7 @@ struct RawTask {
 
 	void cancel(CALLER_LOCATION){
 		auto ok = _platform_cancel();
-		ensure(ok, "Failed to cancel thread");
+		ensure(ok, "Failed to cancel thread", caller_location);
 	}
 
 	~RawTask(){}
@@ -355,12 +351,6 @@ auto make_basic_task(Arena* a, F&& func, C&& cancel){
 // 		}
 
 // 		return TaskStatus_Undefined;
-// 	}
-
-// 	void fault() {
-// 		task0.fault();
-// 		task1.fault();
-// 		task2.fault();
 // 	}
 
 // 	// TODO: Use a timeout

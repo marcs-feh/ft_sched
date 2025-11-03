@@ -286,6 +286,10 @@ struct Option {
 		return same_has_value;
 	}
 
+	constexpr operator bool() const {
+		return _has_value;
+	}
+
 	constexpr
 	Option() : _nat{}, _has_value{false} {}
 
