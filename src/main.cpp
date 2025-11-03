@@ -6,6 +6,31 @@
 
 // #include "tmr_experimental.hpp"
 
+struct SystemStats {
+	Atomic<i32> failed_assertions = 0;
+	Atomic<i32> crc_failures = 0;
+	Atomic<i32> total_stack_space = 0;
+	Atomic<i32> total_arena_space = 0;
+
+	void dump(){
+		constexpr usize stat_dump_size = 512;
+		static u8 stat_dump_memory[stat_dump_size];
+
+		auto res = buffer_printf({&stat_dump_memory[0], stat_dump_size},
+			"failed_assertions: %d\r\n"
+			"crc_failures: %d\r\n"
+			"total_stack_space: %d\r\n"
+			"total_arena_space: %d\r\n"
+			, int(failed_assertions.load()), int(crc_failures.load()), int(total_stack_space.load()), int(total_arena_space.load()));
+
+		fflush(stdout);
+		printf("%s\r\n", res.data);
+		fflush(stdout);
+	}
+};
+
+SystemStats sys_statistics;
+
 extern "C" int puts(char const*);
 
 template<class T>
@@ -81,8 +106,8 @@ void entrypoint(){
 	#else
 	swdg_init(Duration::from_milli(1'000));
 	DeadlineWatcher* watcher = make_deadline_watcher(&task_arena, 32);
-	auto watcher_task = make_basic_task(&task_arena, [watcher, &running](TaskContext){
-		while(running){
+	auto watcher_task = make_basic_task(&task_arena, [watcher](TaskContext){
+		while(1){
 			auto ok = watcher->scan();
 			if(ok){
 				swdg_reset();
@@ -126,8 +151,7 @@ void entrypoint(){
 				printf("-\r\n");
 			}
 
-
-			sleep_for(Duration::from_milli(50));
+			sleep_for(Duration::from_milli(100));
 		}
 
 		return Unit{};

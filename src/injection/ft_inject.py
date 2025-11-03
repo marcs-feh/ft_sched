@@ -1,64 +1,45 @@
 import time
 import random
 import struct
+import csv
+
+from datetime import datetime
+from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import Any
+
 from pyocd.core.helpers import ConnectHelper
 from pyocd.core.target import Target
 from pyocd.flash.file_programmer import FileProgrammer
+
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
-import csv
-from datetime import datetime
 
-class STM32FaultInjector:
-    def __init__(self, target_type='STM32F411CEUx', elf_path=None):
-        """
-        Initialize fault injector for STM32 using PyOCD and ST-Link
-        
-        Args:
-            target_type: Target MCU type (default: stm32f411ceu6)
-            elf_path: Path to .elf file with debug symbols
-        """
-        self.target_type = target_type
-        self.elf_path = elf_path
-        self.session = None
-        self.target = None
-        self.symbols = {}
-        
-        if elf_path:
-            self.load_symbols(elf_path)
+@dataclass
+class Symbol:
+    name : str
+    address : str
+    size : int
+    type : Any
+
+class STM32Connection:
+    """Active connection to STM32 target via ST-Link"""
     
-    def load_symbols(self, elf_path):
-        """
-        Parse ELF file and extract symbol table
-        
-        Args:
-            elf_path: Path to the .elf file
-        """
-        print(f"Loading symbols from {elf_path}...")
-        
-        try:
-            with open(elf_path, 'rb') as f:
-                elf = ELFFile(f)
-                
-                # Iterate through all sections to find symbol tables
-                for section in elf.iter_sections():
-                    if isinstance(section, SymbolTableSection):
-                        for symbol in section.iter_symbols():
-                            if symbol.name and symbol['st_value'] != 0:
-                                self.symbols[symbol.name] = {
-                                    'address': symbol['st_value'],
-                                    'size': symbol['st_size'],
-                                    'type': symbol['st_info']['type']
-                                }
-                
-                print(f"Loaded {len(self.symbols)} symbols")
-                return True
-                
-        except Exception as e:
-            print(f"Failed to load symbols: {e}")
-            return False
+    def __init__(self, session, target, symbols) -> None:
+        self.session = session
+        self.target = target
+        self.symbols = symbols
     
-    def find_symbol(self, symbol_name):
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+        if self.session:
+            self.session.close()
+            print("\nDisconnected from target")
+        return False
+    
+    def find_symbol(self, symbol_name) -> Symbol | None:
         """
         Find a symbol by name
         
@@ -85,62 +66,24 @@ class STM32FaultInjector:
                     print(f"  - {match}")
             return None
     
-    def list_symbols(self, pattern=None):
+    def list_symbols(self, pattern: str) -> list[Symbol]:
         """
         List all symbols, optionally filtered by pattern
         
         Args:
-            pattern: Optional string to filter symbol names
+            pattern: Symbol name substring
         """
         matching = self.symbols.keys()
-        if pattern:
-            matching = [s for s in matching if pattern.lower() in s.lower()]
+        matching = [s for s in matching if pattern.lower() in s.lower()]
         
-        print(f"\nFound {len(matching)} symbols" + (f" matching '{pattern}'" if pattern else ""))
-        for symbol_name in sorted(matching)[:20]:  # Show first 20
-            sym = self.symbols[symbol_name]
-            print(f"  {symbol_name:40s} @ 0x{sym['address']:08X} ({sym['size']} bytes)")
-        
-        if len(matching) > 20:
-            print(f"  ... and {len(matching) - 20} more")
+        result = []
+
+        for symbol_name in sorted(matching)[:20]:
+            result.append(self.symbols[symbol_name])
+        return result
+
     
-    def connect(self):
-        """Establish connection to the target MCU via ST-Link"""
-        try:
-            # Connect to the target
-            self.session = ConnectHelper.session_with_chosen_probe(
-                target_override=self.target_type,
-                options={
-                    'frequency': 4000000,  # 4 MHz SWD frequency
-                    'connect_mode': 'under-reset'
-                }
-            )
-            
-            self.session.open()
-            self.target = self.session.target
-            
-            print(f"Connected to ST-Link")
-            print(f"Target: {self.target.part_number}")
-            # print(f"Core: {self.target.core.core_type}")
-            # print(f"State: {self.target.get_state()}")
-            
-            # Halt the target initially
-            if self.target.get_state() == Target.State.RUNNING:
-                self.target.halt()
-                print("Target halted")
-            
-            return True
-            
-        except Exception as e:
-            print(f"Connection failed: {e}")
-            print("\nTroubleshooting tips:")
-            print("  - Make sure ST-Link drivers are installed")
-            print("  - Check that ST-Link is connected via USB")
-            print("  - Verify target MCU has power")
-            print("  - Try: pyocd list  (to see available probes)")
-            return False
-    
-    def read_memory_u32(self, address, count=1):
+    def read_memory_u32(self, address, count: int=1):
         """
         Read 32-bit words from memory
         
@@ -158,7 +101,7 @@ class STM32FaultInjector:
             print(f"Memory read failed: {e}")
             return None
     
-    def write_memory_u32(self, address, values):
+    def write_memory_u32(self, address, values) -> bool:
         """
         Write 32-bit words to memory
         
@@ -387,59 +330,61 @@ class STM32FaultInjector:
                 'offset_valid', 'ptr_valid', 'capacity_valid'
             ])
         
-        for i, (field, bit_pos, description) in enumerate(fault_scenarios):
-            print(f"\n{'='*70}")
-            print(f"Scenario {i+1}/{len(fault_scenarios)}: {description}")
-            print(f"{'='*70}")
-            
-            # Inject fault
-            orig, corr = self.inject_arena_field_fault(arena_symbol, field, bit_pos)
-            
-            # Read new state
-            print(f"\n--- Arena State After Fault ---")
-            new_state = self.dump_arena(arena_symbol)
-            
-            result = {
-                'timestamp': datetime.now().isoformat(),
-                'scenario': description,
-                'field': field,
-                'bit': bit_pos,
-                'original': orig,
-                'corrupted': corr,
-                'after': new_state
-            }
-            
-            results.append(result)
-            
-            # Log to CSV
-            if csv_writer and new_state:
-                csv_writer.writerow([
-                    result['timestamp'],
-                    description,
-                    field,
-                    bit_pos,
-                    f"0x{orig:08X}" if orig else 'N/A',
-                    f"0x{corr:08X}" if corr else 'N/A',
-                    f"0x{new_state['data']:08X}",
-                    new_state['offset'],
-                    new_state['capacity'],
-                    f"0x{new_state['last_allocation']:08X}",
-                    new_state['region_count'],
-                    new_state['offset'] <= new_state['capacity'],
-                    0x20000000 <= new_state['data'] <= 0x20020000,
-                    0 < new_state['capacity'] <= 128*1024
-                ])
-            
-            # Wait between faults
-            time.sleep(0.5)
+        try:
+            for i, (field, bit_pos, description) in enumerate(fault_scenarios):
+                print(f"\n{'='*70}")
+                print(f"Scenario {i+1}/{len(fault_scenarios)}: {description}")
+                print(f"{'='*70}")
+                
+                # Inject fault
+                orig, corr = self.inject_arena_field_fault(arena_symbol, field, bit_pos)
+                
+                # Read new state
+                print(f"\n--- Arena State After Fault ---")
+                new_state = self.dump_arena(arena_symbol)
+                
+                result = {
+                    'timestamp': datetime.now().isoformat(),
+                    'scenario': description,
+                    'field': field,
+                    'bit': bit_pos,
+                    'original': orig,
+                    'corrupted': corr,
+                    'after': new_state
+                }
+                
+                results.append(result)
+                
+                # Log to CSV
+                if csv_writer and new_state:
+                    csv_writer.writerow([
+                        result['timestamp'],
+                        description,
+                        field,
+                        bit_pos,
+                        f"0x{orig:08X}" if orig else 'N/A',
+                        f"0x{corr:08X}" if corr else 'N/A',
+                        f"0x{new_state['data']:08X}",
+                        new_state['offset'],
+                        new_state['capacity'],
+                        f"0x{new_state['last_allocation']:08X}",
+                        new_state['region_count'],
+                        new_state['offset'] <= new_state['capacity'],
+                        0x20000000 <= new_state['data'] <= 0x20020000,
+                        0 < new_state['capacity'] <= 128*1024
+                    ])
+                
+                # Wait between faults
+                time.sleep(0.5)
         
-        if csv_file:
-            csv_file.close()
-            print(f"\nResults logged to {log_file}")
+        finally:
+            if csv_file:
+                csv_file.close()
+                print(f"\nResults logged to {log_file}")
         
         return results
     
-    def resume(self):
+    def resume(self) -> None:
         """Resume target execution"""
         try:
             self.target.resume()
@@ -447,7 +392,7 @@ class STM32FaultInjector:
         except Exception as e:
             print(f"Resume failed: {e}")
     
-    def halt(self):
+    def halt(self) -> None:
         """Halt target execution"""
         try:
             self.target.halt()
@@ -455,19 +400,115 @@ class STM32FaultInjector:
         except Exception as e:
             print(f"Halt failed: {e}")
     
-    def reset(self, halt=True):
+    def reset(self, halt: bool=True) -> None:
         """Reset the target"""
         try:
             self.target.reset_and_halt() if halt else self.target.reset()
             print(f"Target reset ({'halted' if halt else 'running'})")
         except Exception as e:
             print(f"Reset failed: {e}")
+
+
+class STM32FaultInjector:
+    """Fault injector for STM32 microcontrollers using PyOCD and ST-Link"""
     
-    def disconnect(self):
-        """Close the connection"""
-        if self.session:
-            self.session.close()
-            print("\nDisconnected from target")
+    def __init__(self, target_type: str='stm32f411ceu6', elf_path=None) -> None:
+        """
+        Initialize fault injector for STM32
+        
+        Args:
+            target_type: Target MCU type (default: stm32f411ceu6)
+            elf_path: Path to .elf file with debug symbols
+        """
+        self.target_type = target_type
+        self.elf_path = elf_path
+        self.symbols = {}
+        
+        if elf_path:
+            self.load_symbols(elf_path)
+    
+    def load_symbols(self, elf_path) -> bool:
+        """
+        Parse ELF file and extract symbol table
+        
+        Args:
+            elf_path: Path to the .elf file
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        print(f"[Symbol Loading]")
+        
+        try:
+            print(f"  Open {elf_path}...")
+            with open(elf_path, 'rb') as f:
+                elf = ELFFile(f)
+                
+                # Iterate through all sections to find symbol tables
+                for section in elf.iter_sections():
+                    if isinstance(section, SymbolTableSection):
+                        for symbol in section.iter_symbols():
+                            if symbol.name and symbol['st_value'] != 0:
+                                self.symbols[symbol.name] = Symbol(
+                                    address = symbol['st_value'],
+                                    size = symbol['st_size'],
+                                    type = symbol['st_info']['type'],
+                                    name = symbol.name
+                                )
+                
+                print(f"  Loaded {len(self.symbols)} symbols")
+                return True
+                
+        except Exception as e:
+            print(f"  Failed to load symbols: {e}")
+            return False
+    
+    @contextmanager
+    def connect(self) -> STM32Connection:
+        """
+        Establish connection to the target MCU via ST-Link
+        
+        Yields:
+            STM32Connection: Active connection object
+        """
+        session = None
+        print('[Connect to MCU]')
+        try:
+            # Connect to the target
+            session = ConnectHelper.session_with_chosen_probe(
+                target_override=self.target_type,
+                options={
+                    'frequency': 4000000,  # 4 MHz SWD frequency
+                    'connect_mode': 'under-reset'
+                }
+            )
+            
+            session.open()
+            target = session.target
+            
+            print(f"  Connected to {target.part_number} | {target.get_state()}")
+            
+            # Halt the target initially
+            if target.get_state() == Target.State.RUNNING:
+                target.halt()
+                print("  Target halted")
+            
+            # Yield the connection object
+            yield STM32Connection(session, target, self.symbols)
+            
+        except Exception as e:
+            print(f"  Connection failed: {e}")
+            print(f"  Troubleshooting tips:")
+            print(f"    - Make sure ST-Link drivers are installed")
+            print(f"    - Check that ST-Link is connected via USB")
+            print(f"    - Verify target MCU has power")
+            print(f"    - Try: pyocd list  (to see available probes)")
+            raise
+        
+        finally:
+            if session:
+                session.close()
+                print("\nDisconnected from target")
 
 
 # Example usage
@@ -475,52 +516,48 @@ if __name__ == "__main__":
     # Create fault injector with ELF file
     injector = STM32FaultInjector(
         target_type='stm32f411ceux',
-        elf_path='stm32.elf'
+        elf_path='../stm32/build/stm32.elf'
     )
     
-    # Connect to the target
-    if injector.connect():
-        print("\n" + "="*60)
-        
-        # Example 1: Find arena symbols
-        print("\nExample 1: Finding Arena Symbols")
-        injector.list_symbols('arena')
+    # Use context manager for connection
+    with injector.connect() as conn:
+        print("[Finding Arena Symbols]")
+        symbols = conn.list_symbols('arena')
+        for sym in symbols:
+            print(f"  {sym.name:60s} {sym.type} @ 0x{sym.address:08X} ({sym.size} bytes)")
+
+        print(conn.symbols['main_arena'])
         
         # Example 2: Dump arena structure
-        print("\n" + "="*60)
-        print("\nExample 2: Dump Arena State")
-        injector.dump_arena('main_arena')
+        # print("\n" + "="*60)
+        # print("\nExample 2: Dump Arena State")
+        # conn.dump_arena('main_arena')
         
         # Example 3: Inject fault into specific arena field
-        print("\n" + "="*60)
-        print("\nExample 3: Corrupt Arena Offset")
-        injector.inject_arena_field_fault('main_arena', 'offset', bit_position=16)
+        # print("\n" + "="*60)
+        # print("\nExample 3: Corrupt Arena Offset")
+        # conn.inject_arena_field_fault('main_arena', 'offset', bit_position=16)
         
-        # Example 4: Run comprehensive fault campaign with logging
-        print("\n" + "="*60)
-        print("\nExample 4: Arena Fault Campaign")
+        # # Example 4: Run comprehensive fault campaign with logging
+        # print("\n" + "="*60)
+        # print("\nExample 4: Arena Fault Campaign")
         
-        fault_scenarios = [
-            ('data', 8, 'Corrupt data pointer - low byte'),
-            ('offset', 31, 'Corrupt offset - sign bit flip'),
-            ('capacity', 0, 'Corrupt capacity - LSB flip'),
-            ('last_allocation', 16, 'Corrupt last_allocation pointer'),
-            ('offset', 16, 'Corrupt offset - middle bits'),
-        ]
+        # fault_scenarios = [
+        #     ('data', 8, 'Corrupt data pointer - low byte'),
+        #     ('offset', 31, 'Corrupt offset - sign bit flip'),
+        #     ('capacity', 0, 'Corrupt capacity - LSB flip'),
+        #     ('last_allocation', 16, 'Corrupt last_allocation pointer'),
+        #     ('offset', 16, 'Corrupt offset - middle bits'),
+        # ]
         
-        results = injector.arena_fault_campaign(
-            'main_arena',
-            fault_scenarios,
-            log_file='fault_injection_results.csv'
-        )
+        # results = conn.arena_fault_campaign(
+        #     'main_arena',
+        #     fault_scenarios,
+        #     log_file='fault_injection_results.csv'
+        # )
         
-        # Example 5: Reset and resume
-        print("\n" + "="*60)
-        print("\nExample 5: Reset Target")
-        injector.reset(halt=True)
-        
-        # Disconnect
-        injector.disconnect()
-    else:
-        print("Failed to connect to target")
-        print("\nTo see available targets, run: pyocd list")
+        # # Example 5: Reset and resume
+        print("[Reset Target]")
+        conn.reset(halt=True)
+    
+    print("\nDone")
