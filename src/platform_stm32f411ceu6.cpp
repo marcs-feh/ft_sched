@@ -26,8 +26,9 @@ void trap(){
 //// FT_Sched platform specifics
 #include "ft_sched.hpp"
 
+// TODO: Loosen alignment
 struct RawTaskPlatformSpecific {
-	alignas(portBYTE_ALIGNMENT) TaskHandle_t handle;
+	alignas(portBYTE_ALIGNMENT) Atomic<TaskHandle_t> handle;
 	alignas(portBYTE_ALIGNMENT) void* stack_base;
 	u32 stack_size;
 };
@@ -52,16 +53,17 @@ void _freertos_task_wrapper(void* task_ptr){
 	}
 }
 
-void RawTask::_init_specifics_and_run(){
+bool RawTask::_platform_init(Arena* arena, usize stack_size, RawTaskFunc, void*){
 	if(_status.load() != TaskStatus_Initialized){
-		// TODO: log fail
+		// TODO: LOG: "Invalid task status";
 		_status.store(TaskStatus_Fault);
-		return;
+		return false;
 	}
 
 	if(!stack_size){
 		stack_size = default_stack_size;
 	}
+	stack_size = max(stack_size, min_stack_size);
 
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 
@@ -70,13 +72,16 @@ void RawTask::_init_specifics_and_run(){
 	auto stack = (StackType_t*)arena->alloc(stack_size, portBYTE_ALIGNMENT * 2);
 
 	if(!name.data){
-		panic("Failed to allocate name");
+		printf("Failed to allocate name\r\n");
+		return false;
 	}
 	if(!tcb){
-		panic("Failed to allocate TCB");
+		printf("Failed to allocate TCB\r\n");
+		return false;
 	}
 	if(!stack){
-		panic("Failed to allocate stack");
+		printf("Failed to allocate stack\r\n");
+		return false;
 	}
 
 	TaskHandle_t handle = xTaskCreateStatic(
@@ -89,12 +94,16 @@ void RawTask::_init_specifics_and_run(){
 		tcb /* TCB data */
 	);
 
-	specific->handle = handle;
+	specific->handle.store(handle);
+
+	return handle != NULL;
 }
 
-void RawTask::_join_and_deinit_specifics(){
+bool RawTask::_platform_join(){
+	constexpr auto join_interval = Duration::from_milli(20);
+
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
-	TaskHandle_t handle = specific->handle;
+	TaskHandle_t handle = specific->handle.load();
 
 	for(
 		auto status = this->_status.load(memory_order_relaxed);
@@ -102,28 +111,19 @@ void RawTask::_join_and_deinit_specifics(){
 		status = this->_status.load(memory_order_relaxed)
 	){
 		printf("Joining from %d (status=%d)\r\n", int(id), int(status)); fflush(stdout);
-		sleep_for(Duration::from_milli(250));
+		sleep_for(join_interval);
 	}
 
-	vTaskDelete(handle);
-	printf("DELETED: %d\r\n", int(id));
+	if(handle){
+		vTaskDelete(handle);
+	}
+	specific->handle.store(NULL);
 
-	// if(specific.handle)
-	// 	vTaskDelete(specific.handle);
+	return true;
 }
 
-void RawTask::_cancel_and_deinit_specifics(){
+void RawTask::_platform_cancel(){
 	unimplemented();
-	// auto status = this->_status.load(memory_order_relaxed);
-	// if(status >= TaskStatus_Done){
-	// 	return;
-	// }
-
-	// auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
-	// this->_status.store(TaskStatus_Fault);
-	// auto terminated = TerminateThread(specific->handle, 0) != 0;
-	// // ensure(terminated, "Failed to kill thread");
-	// CloseHandle(specific->handle);
 }
 
 void sleep_for(Duration d){
