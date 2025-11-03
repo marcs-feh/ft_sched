@@ -29,6 +29,7 @@ void trap(){
 
 struct RawTaskPlatformSpecific {
 	pthread_t handle;
+	Atomic<bool> handle_initialized = false;
 };
 
 static
@@ -42,40 +43,55 @@ void* task_linux_wrapper(void* task_ptr){
 	return NULL;
 }
 
-void RawTask::_init_specifics_and_run(){
-	ensure(_status.load() == TaskStatus_Initialized, "Invalid task status");
+	// bool _platform_join();
+	// bool _platform_cancel();
+
+bool RawTask::_platform_init(Arena*, usize, RawTaskFunc, void*){
+	if(_status.load() != TaskStatus_Initialized){
+		// TODO: LOG: "Invalid task status";
+		_status.store(TaskStatus_Fault);
+		return false;
+	}
 
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 	auto ok = pthread_create(&specific->handle, nullptr, task_linux_wrapper, (void*)this) == 0;
+	specific->handle_initialized.store(true);
 
-	ensure(ok, "Failed to create thread");
+	return ok;
 }
 
-void RawTask::_join_and_deinit_specifics(){
+bool RawTask::_platform_join(){
 	auto status = this->_status.load(memory_order_relaxed);
-	if(status == TaskStatus_Fault || status == TaskStatus_Done){
-		return;
+	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
+
+	if(status >= TaskStatus_Done && !specific->handle_initialized.load(memory_order_relaxed)){
+		// Joined already
+		return true;
 	}
 
-	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
-	pthread_join(specific->handle, NULL);
-
+	auto res = pthread_join(specific->handle, NULL) == 0;
+	specific->handle_initialized.store(false);
 	status = this->_status.load();
 	ensure(status == TaskStatus_Fault || status == TaskStatus_Done, "Invalid task status");
+	return true;
 }
 
-void RawTask::_cancel_and_deinit_specifics(){
+bool RawTask::_platform_cancel(){
 	auto status = _status.load(memory_order_relaxed);
-	if(status == TaskStatus_Fault || status == TaskStatus_Done){
-		return;
-	}
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 
-	if(_status.load(memory_order_relaxed) == TaskStatus_Started){
-		pthread_cancel(specific->handle);
+	if(status >= TaskStatus_Done || !specific->handle_initialized){
+		// Already cancelled
+		return true;
 	}
 
+	bool res = true;
+	if(_status.load(memory_order_relaxed) == TaskStatus_Started){
+		res = pthread_cancel(specific->handle) == 0;
+		specific->handle_initialized.store(false);
+	}
 	_status.store(TaskStatus_Fault);
+	return res;
 }
 
 TimeTick tick_now(){
