@@ -119,6 +119,7 @@ using TaskCancelCallback = void (*)(RawTask* self);
 
 struct RawTask {
 	RawTaskFunc func = nullptr;
+	usize stack_size = 0;
 	Arena* arena = nullptr;
 	void* args = nullptr;
 	DeadlineSlot* deadline = nullptr;
@@ -164,6 +165,8 @@ struct RawTask {
 u32 next_raw_task_id();
 
 void init_raw_task(RawTask* task, Arena* a, RawTaskFunc func, void* args);
+
+void init_raw_task(RawTask* task, Arena* a, usize stack_size, RawTaskFunc func, void* args);
 
 RawTask* make_raw_task(Arena* a, RawTaskFunc func, void* args);
 
@@ -420,29 +423,22 @@ struct DeadlineWatcher {
 		: slots{}
 		, _lock{}
 	{}
-
-	// void display(){
-	// 	printf("Free: ");
-	// 	for(auto const& slot : slots){
-	// 		if(!slot.task){
-	// 			printf(" . ");
-	// 		}
-	// 	}
-	// 	printf("\n");
-
-	// 	printf("Check: ");
-	// 	for(auto const& slot : slots){
-	// 		if(slot.task){
-	// 			printf("%d ", (int)slot.limit.to_milli());
-	// 		}
-	// 	}
-	// 	printf("\n");
-	// }
 };
 
 void init_deadline_watcher(DeadlineWatcher* w, Slice<DeadlineSlot> slots);
 
 DeadlineWatcher* make_deadline_watcher(Arena* a, usize slot_count);
+
+
+//// Software watchdog timer
+void swdg_init(Duration n);
+
+void swdg_reset();
+
+void swdg_stop();
+
+void swdg_resume();
+
 
 #if 0
 struct TMR_Task {

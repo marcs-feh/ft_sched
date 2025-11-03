@@ -1,9 +1,10 @@
 /// Library Translation Unit
 #include "ft_sched.hpp"
 
-#include "task.cpp"
+#include "raw_task.cpp"
 #include "crc32.cpp"
 #include "deadline.cpp"
+#include "software_watchdog.cpp"
 
 #if defined(FT_SCHED_PLATFORM_LINUX)
 	#include "platform_linux.cpp"

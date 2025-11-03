@@ -32,7 +32,8 @@ struct RawTaskPlatformSpecific {
 	u32 stack_size;
 };
 
-constexpr usize rtos_stack_size_words = 200;
+constexpr usize min_stack_size = sizeof(StackType_t) * configMINIMAL_STACK_SIZE;
+constexpr usize default_stack_size = max(min_stack_size, sizeof(StackType_t) * 200);
 
 static
 void _freertos_task_wrapper(void* task_ptr){
@@ -58,11 +59,15 @@ void RawTask::_init_specifics_and_run(){
 		return;
 	}
 
+	if(!stack_size){
+		stack_size = default_stack_size;
+	}
+
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 
 	auto name = arena_printf(arena, "T:%d", int(id));
 	auto tcb = make<StaticTask_t>(arena);
-	auto stack = (StackType_t*)arena->alloc(rtos_stack_size_words * sizeof(StackType_t), portBYTE_ALIGNMENT * 2);
+	auto stack = (StackType_t*)arena->alloc(stack_size, portBYTE_ALIGNMENT * 2);
 
 	if(!name.data){
 		panic("Failed to allocate name");
@@ -77,7 +82,7 @@ void RawTask::_init_specifics_and_run(){
 	TaskHandle_t handle = xTaskCreateStatic(
 		_freertos_task_wrapper, /* Task body */
 		name.data, /* Name */
-		rtos_stack_size_words, /* Stack size */
+		stack_size / sizeof(StackType_t), /* Stack size */
 		(void*)this, /* Task Parameter */
 		osPriorityNormal, /* Priority */
 		stack, /* Stack data */

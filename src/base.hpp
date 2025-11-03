@@ -73,32 +73,10 @@ constexpr auto memory_order_release = std::memory_order_release;
 constexpr auto memory_order_seq_cst = std::memory_order_seq_cst;
 // NOTE: `consume` memory order has been deliberately ommited due to being poorly specified
 
-using AtomicI8  = Atomic<i8>;
-using AtomicI16 = Atomic<i16>;
-using AtomicI32 = Atomic<i32>;
-using AtomicI64 = Atomic<i64>;
-
-using AtomicU8  = Atomic<u8>;
-using AtomicU16 = Atomic<u16>;
-using AtomicU32 = Atomic<u32>;
-using AtomicU64 = Atomic<u64>;
-
-using AtomicUsize = Atomic<usize>;
-using AtomicIsize = Atomic<isize>;
-
-using AtomicBool = Atomic<bool>;
-
-// static_assert(AtomicI8::is_always_lock_free, "Expected i8 to be lock-free");
-// static_assert(AtomicI16::is_always_lock_free, "Expected i16 to be lock-free");
-// static_assert(AtomicI32::is_always_lock_free, "Expected i32 to be lock-free");
-// static_assert(AtomicI64::is_always_lock_free, "Expected i64 to be lock-free");
-// static_assert(AtomicU8::is_always_lock_free, "Expected u8 to be lock-free");
-// static_assert(AtomicU16::is_always_lock_free, "Expected u16 to be lock-free");
-// static_assert(AtomicU32::is_always_lock_free, "Expected u32 to be lock-free");
-// static_assert(AtomicU64::is_always_lock_free, "Expected u64 to be lock-free");
-static_assert(AtomicUsize::is_always_lock_free, "Expected usize to be lock-free");
-static_assert(AtomicIsize::is_always_lock_free, "Expected isize to be lock-free");
-static_assert(AtomicBool::is_always_lock_free, "Expected bool to be lock-free");
+static_assert(Atomic<uintptr>::is_always_lock_free, "Expected usize to be always lock-free");
+static_assert(Atomic<usize>::is_always_lock_free, "Expected usize to be always lock-free");
+static_assert(Atomic<isize>::is_always_lock_free, "Expected isize to be always lock-free");
+static_assert(Atomic<bool>::is_always_lock_free, "Expected bool to be always lock-free");
 
 //// Source location
 #define CALLER_LOCATION std::source_location const& caller_location = std::source_location::current()

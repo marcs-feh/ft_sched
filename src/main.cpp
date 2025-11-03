@@ -4,46 +4,9 @@
 
 #include "ft_sched.hpp"
 
-#include "tmr.hpp"
+// #include "tmr_experimental.hpp"
 
 extern "C" int puts(char const*);
-
-#if !defined(FT_SCHED_PLATFORM_STM32F411CEU6)
-namespace swdg {
-static Atomic<TimeTick> last_tick = 0;
-
-static RawTask task;
-
-static Duration limit = {0};
-
-void watchdog_timer_func(RawTask*){
-	last_tick = tick_now();
-
-	while(1){
-		auto now = tick_now();
-		auto elapsed = tick_diff(now, last_tick.load(memory_order_relaxed));
-
-		if(elapsed > limit){
-			fprintf(stderr, "[swdg] Failed! limit=%tdms elapsed=%tdms\n", limit.to_milli(), elapsed.to_milli());
-			trap();
-		}
-		sleep_for(Duration::from_milli(1));
-	}
-}
-
-void reset_watchdog(){
-	// printf("Reset WDG\n"); fflush(stdout);
-	last_tick.store(tick_now(), memory_order_relaxed);
-}
-
-void init(Duration n){
-	limit = n;
-	init_raw_task(&task, nullptr, watchdog_timer_func, nullptr);
-	task.run();
-	printf("[swdg] Initialized\n");
-}
-}
-#endif
 
 template<class T>
 void print_list(List<T> const& list, char const* elem_fmt){
@@ -103,10 +66,11 @@ attribute_force_inline static inline
 void entrypoint(){
 	// swdg::init(Duration::from_milli(1'000));
 
+	#if defined(FT_SCHED_PLATFORM_STM32F411CEU6)
 	for(int i = 5; i > 0; i --){
-		sleep_for(Duration::from_milli(1'000));
-		printf("%d\r\n", i);
+		sleep_for(Duration::from_milli(1'000)); printf("%d\r\n", i); fflush(stdout);
 	}
+	#endif
 
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
 
@@ -136,27 +100,25 @@ void entrypoint(){
 	// 	return 69;
 	// });
 	// printf("SPAWNED: %d\n", tmr0->supervisor.id);
-	printf("START TASKS\n");
 
-	// auto t = make_basic_task(&main_arena, [](TaskContext ctx){
-	// 	auto inner = make_basic_task(&main_arena, [](TaskContext ctx){
-	// 		printf("[INNER] Hello %d\r\n", int(ctx.id()));
-	// 		return Unit{};
-	// 	});
+	auto t = make_basic_task(&main_arena, [](TaskContext ctx){
+		auto inner = make_basic_task(&main_arena, [](TaskContext ctx){
+			printf("[INNER] Hello %d\r\n", int(ctx.id()));
+			return Unit{};
+		});
 
-	// 	printf("BEGIN INNER\r\n");
-	// 	inner->run();
-	// 	printf("JOIN INNER\r\n");
-	// 	inner->join();
-	// 	printf("END INNER\r\n");
+		inner->run();
+		inner->join();
 
-	// 	printf("[OUTER] Hello %d\r\n", int(ctx.id()));
+		printf("[OUTER] Hello %d\r\n", int(ctx.id()));
+		fflush(stdout);
 
-	// 	return Unit{};
-	// });
+		return Unit{};
+	});
 
 	t->run();
 	t->join();
+	fflush(stdout);
 
 	// tmr0->run();
 	// tmr0->join();
@@ -165,7 +127,11 @@ void entrypoint(){
 	// char anim[] = {'-', '\\', '|', '/'};
 	// u8 anim_frame = 0;
 	printf("--- ENTRYPOINT END ---\r\n");
+
 	while(1){
+		#if !defined(FT_SCHED_NO_MAIN)
+		break;
+		#endif
 	}
 }
 
