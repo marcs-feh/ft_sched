@@ -97,8 +97,32 @@ void print_info(){
 	msg = buffer_printf(buf, "  RawTask size:    %td", sizeof(RawTask)); printf("%s\r\n", msg.data);
 }
 
+#include <math.h>
+
+constexpr f64 pi = 3.14159265358979323846264338327950288;
+constexpr f64 tau = 2.0 * pi;
+constexpr f64 euler = 2.71828182845904523536028747135266249;
+
+constexpr f64 gaussian(f64 peak, f64 stddev, f64 x){
+	auto exponent = - (x*x) / (2 * stddev * stddev);
+	return peak * exp(exponent);
+}
+
 attribute_force_inline static inline
 void entrypoint(){
+	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
+	task_arena = arena_from_buffer({&task_arena_memory[0], task_arena_size});
+
+	constexpr f64 freq_mult = 2.0;
+	constexpr usize samples = 21;
+	auto signal = make_slice<f64>(&main_arena, samples);
+	for(int t = 0; t < signal.len; t++){
+		signal[t] = gaussian(1.0, 0.25, (f64(t) / samples) - 0.5);
+	}
+
+	print_slice(signal, "%0.02f");
+
+	/*
 	#if defined(FT_SCHED_PLATFORM_STM32F411CEU6)
 	for(int i = 5; i > 0; i --){
 		sleep_for(Duration::from_milli(1'000)); printf("%d\r\n", i); fflush(stdout);
@@ -106,6 +130,7 @@ void entrypoint(){
 	#else
 	swdg_init(Duration::from_milli(1'000));
 	DeadlineWatcher* watcher = make_deadline_watcher(&task_arena, 32);
+	ensure(watcher != nullptr, "Failed to create watcher");
 	auto watcher_task = make_basic_task(&task_arena, [watcher](TaskContext){
 		while(1){
 			auto ok = watcher->scan();
@@ -121,11 +146,6 @@ void entrypoint(){
 	#endif
 
 	print_info();
-
-	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
-	task_arena = arena_from_buffer({&task_arena_memory[0], task_arena_size});
-
-
 	auto queue = make_spsc_queue<i32>(&main_arena, 32);
 
 	bool tasks_running = true;
@@ -161,10 +181,9 @@ void entrypoint(){
 	fflush(stdout);
 
 	while(1){
-		#if !defined(FT_SCHED_NO_MAIN)
-		break;
-		#endif
+		sleep_for({0});
 	}
+	*/
 }
 
 //// ---------------------------------------------

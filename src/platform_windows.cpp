@@ -144,6 +144,10 @@ usize tick_frequency(){
 	return _tick_frequency;
 }
 
+void task_yield(){
+	Sleep(0);
+}
+
 void sleep_for(Duration d){
 	DWORD ms = max(0, (d._value / Duration::millisecond));
 	Sleep(ms);

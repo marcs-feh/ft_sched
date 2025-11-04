@@ -139,5 +139,9 @@ usize tick_frequency(){
 	return configTICK_RATE_HZ;
 }
 
+void task_yield(){
+	taskYIELD();
+}
+
 static_assert(sizeof(RawTaskPlatformSpecific) <= sizeof(RawTaskPlatformSpecificData), "Platform specific struct has insufficient size");
 static_assert(alignof(RawTaskPlatformSpecific) <= alignof(RawTaskPlatformSpecificData), "Platform specific struct has insufficient alignment");

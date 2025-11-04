@@ -95,6 +95,9 @@ enum TaskStatus : u8 {
 
 struct RawTask;
 
+// Yield the currently executing task
+void task_yield();
+
 struct DeadlineSlot {
 	int value;
 
