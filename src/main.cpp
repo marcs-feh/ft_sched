@@ -3,8 +3,9 @@
 #include "base.hpp"
 
 #include "ft_sched.hpp"
+
+#include "image.cpp"
 #include "wav.cpp"
-#include "scattered_and_lost.wav.cpp"
 
 // #include "tmr_experimental.hpp"
 
@@ -89,7 +90,7 @@ void print_info(){
 	msg = buffer_printf(buf, "  Address Width:   %zu-bit", sizeof(void*) * 8); printf("%s\r\n", msg.data);
 	msg = buffer_printf(buf, "  Tick Frequency:  %tu Hz", tick_frequency()); printf("%s\r\n", msg.data);
 	msg = buffer_printf(buf, "  RawTask size:    %td", sizeof(RawTask)); printf("%s\r\n", msg.data);
-	msg = buffer_printf(buf, "  WAV file size:   %td", sizeof(scattered_and_lost_wav_data)); printf("%s\r\n", msg.data);
+	// msg = buffer_printf(buf, "  WAV file size:   %td", sizeof(scattered_and_lost_wav_data)); printf("%s\r\n", msg.data);
 }
 
 #include <math.h>
@@ -140,6 +141,7 @@ void entrypoint(){
 	print_slice(signal, "%0.02f");
 
 	print_info();
+
 	/*
 	auto queue = make_spsc_queue<i32>(&main_arena, 32);
 

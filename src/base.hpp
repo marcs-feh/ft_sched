@@ -417,6 +417,15 @@ struct Array {
 
 	static_assert(N > 0, "Cannot have a zero sized array");
 
+	template<typename U> constexpr
+	Array<U, N> cast() const {
+		Array<U, N> res;
+		for(int i = 0; i < N; i += 1){
+			res[i] = static_cast<T>(_v[i]);
+		}
+		return res;
+	}
+
 	constexpr
 	T& operator[](unsigned int idx){
 		ensure(idx < N, "Out of bounds access");
@@ -467,6 +476,24 @@ struct Array {
 	#undef ELEM_UNARY_OP
 };
 
+//// IO
+constexpr u8 io_operation_read = 1;
+constexpr u8 io_operation_write = 2;
+
+using IO_Stream_Func = isize (*)(u8 op, void* impl, Slice<u8> buf);
+
+struct IO_Stream {
+	void* _impl;
+	IO_Stream_Func _func;
+	
+	isize read(Slice<u8> buf){
+		return _func(io_operation_read, _impl, buf);
+	}
+
+	isize write(Slice<u8> buf){
+		return _func(io_operation_write, _impl, buf);
+	}
+};
 
 //// Memory
 constexpr usize mem_kilobyte = 1024ll;
