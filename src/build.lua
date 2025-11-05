@@ -42,6 +42,7 @@ function main()
 
 	if flags.generate then
 		generate_crc32()
+		generate_wav_data()
 	end
 
 	local target_name = ('%s/%s'):format(titlecase(build_mode), titlecase(platform))
@@ -142,6 +143,17 @@ function execute_build(flash_serial, verbose)
 	exec:wait()
 end
 
+function generate_wav_data()
+	local name = 'scattered_and_lost'
+	local data = c_embed(name .. '.wav')
+	local f = io.open(name .. '.wav.cpp', 'wb')
+	f:write(('static const unsigned char %s_wav_data[] = '):format(name))
+	f:write(data)
+	f:write(';\n\n')
+	f:close()
+	print(('Generated %s.wav.cpp'):format(name))
+end
+
 function generate_crc32()
 	local sb = Builder:new()
 	local polynomial = 0xEDB88320
@@ -191,6 +203,22 @@ function new_c32_lut(polynomial)
     end
 
     return lut
+end
+
+function c_embed(path)
+	local f = io.open(path, 'rb')
+	if not f then return nil end
+	local data = f:read('*a')
+	assert(data, 'Failed to read data')
+
+	local str = '{'
+	for b in data:gmatch('.') do
+		str = str .. ('%d,'):format(string.byte(b))
+	end
+
+	str = str .. '}'
+	f:close()
+	return str
 end
 
 --- String builder

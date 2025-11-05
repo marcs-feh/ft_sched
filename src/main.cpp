@@ -3,6 +3,7 @@
 #include "base.hpp"
 
 #include "ft_sched.hpp"
+#include "wav.cpp"
 
 // #include "tmr_experimental.hpp"
 
@@ -34,21 +35,13 @@ SystemStats sys_statistics;
 extern "C" int puts(char const*);
 
 template<class T>
-void print_list(List<T> const& list, char const* elem_fmt){
-	printf("len: %td cap: %td [ ", list.len, list.cap);
-	for(usize i = 0; i < list.len; i ++){
-		printf(elem_fmt, list[i]);
-		printf(" ");
-	} printf("]\n");
-}
-
-template<class T>
 void print_slice(Slice<T> slice, char const* elem_fmt){
+	u8 elem_buf[32];
 	printf("len: %td [ ", slice.len);
 	for(usize i = 0; i < slice.len; i ++){
-		printf(elem_fmt, slice[i]);
-		printf(" ");
-	} printf("]\n");
+		String s = buffer_printf({&elem_buf[0], sizeof(elem_buf)}, elem_fmt, slice[i]);
+		printf("%s ", s.data);
+	} printf("]\r\n");
 }
 
 template<typename T>
@@ -113,16 +106,6 @@ void entrypoint(){
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
 	task_arena = arena_from_buffer({&task_arena_memory[0], task_arena_size});
 
-	constexpr f64 freq_mult = 2.0;
-	constexpr usize samples = 21;
-	auto signal = make_slice<f64>(&main_arena, samples);
-	for(int t = 0; t < signal.len; t++){
-		signal[t] = gaussian(1.0, 0.25, (f64(t) / samples) - 0.5);
-	}
-
-	print_slice(signal, "%0.02f");
-
-	/*
 	#if defined(FT_SCHED_PLATFORM_STM32F411CEU6)
 	for(int i = 5; i > 0; i --){
 		sleep_for(Duration::from_milli(1'000)); printf("%d\r\n", i); fflush(stdout);
@@ -145,7 +128,17 @@ void entrypoint(){
 	});
 	#endif
 
+	constexpr f64 freq_mult = 2.0;
+	constexpr usize samples = 21;
+	auto signal = make_slice<f64>(&main_arena, samples);
+	for(int t = 0; t < signal.len; t++){
+		signal[t] = gaussian(1.0, 0.25, (f64(t) / samples) - 0.5);
+	}
+
+	print_slice(signal, "%0.02f");
+
 	print_info();
+	/*
 	auto queue = make_spsc_queue<i32>(&main_arena, 32);
 
 	bool tasks_running = true;
@@ -176,6 +169,7 @@ void entrypoint(){
 
 		return Unit{};
 	});
+	*/
 
 	printf("----- FINISHED -----\r\n");
 	fflush(stdout);
@@ -183,7 +177,6 @@ void entrypoint(){
 	while(1){
 		sleep_for({0});
 	}
-	*/
 }
 
 //// ---------------------------------------------

@@ -197,7 +197,7 @@ class STM32Connection:
         except Exception as e:
             print(f"Error waiting for breakpoint: {e}")
             return False
-    def run_until_line(self, source_file: str, line_number: int, timeout_ms: int=5000) -> bool:
+    def run_until_line(self, source_file: str, line_number: int, timeout_ms: int=20_000) -> bool:
         """
         Set a temporary breakpoint and run until it's hit
         

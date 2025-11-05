@@ -482,6 +482,8 @@ uintptr mem_align_forward_ptr(uintptr p, uintptr a);
 
 void* mem_copy(void* dest, void const* src, isize n);
 
+isize mem_compare(void const* lhs, void const* rhs, isize n);
+
 void* mem_copy_no_overlap(void* dest, void const* src, isize n);
 
 void* mem_zero(void* dest, isize n);
