@@ -1,11 +1,12 @@
 #include <stdio.h>
+#include <math.h>
 
 #include "base.hpp"
 
 #include "ft_sched.hpp"
 
 #include "image.cpp"
-#include "wav.cpp"
+// #include "wav.cpp"
 
 // #include "tmr_experimental.hpp"
 
@@ -93,8 +94,6 @@ void print_info(){
 	// msg = buffer_printf(buf, "  WAV file size:   %td", sizeof(scattered_and_lost_wav_data)); printf("%s\r\n", msg.data);
 }
 
-#include <math.h>
-
 constexpr f64 pi = 3.14159265358979323846264338327950288;
 constexpr f64 tau = 2.0 * pi;
 constexpr f64 euler = 2.71828182845904523536028747135266249;
@@ -102,6 +101,30 @@ constexpr f64 euler = 2.71828182845904523536028747135266249;
 constexpr f64 gaussian(f64 peak, f64 stddev, f64 x){
 	auto exponent = - (x*x) / (2 * stddev * stddev);
 	return peak * exp(exponent);
+}
+
+
+static inline
+isize _io_stdout_func(u8 operation, void*, Slice<u8> buf){
+	switch(operation){
+	case io_operation_write:
+		return printf("%.*s", int(buf.len), cstring(buf.data));
+
+	case io_operation_read:
+		return -1;
+
+	case io_operation_close:
+		return -1;
+	default:
+		return -2;
+	}
+}
+
+IO_Stream get_stdout_stream(){
+	return {
+		._impl = nullptr,
+		._func = _io_stdout_func,
+	};
 }
 
 attribute_force_inline static inline
@@ -130,15 +153,6 @@ void entrypoint(){
 		return Unit{};
 	});
 	#endif
-
-	constexpr f64 freq_mult = 2.0;
-	constexpr usize samples = 21;
-	auto signal = make_slice<f64>(&main_arena, samples);
-	for(int t = 0; t < signal.len; t++){
-		signal[t] = gaussian(1.0, 0.25, (f64(t) / samples) - 0.5);
-	}
-
-	print_slice(signal, "%0.02f");
 
 	print_info();
 
