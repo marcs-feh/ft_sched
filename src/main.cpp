@@ -10,6 +10,31 @@
 
 // #include "tmr_experimental.hpp"
 
+Option<Slice<u8>> read_file_whole(cstring path, Arena* arena){
+	FILE* f = fopen(path, "rb");
+	if(!f){
+		return {};
+	}
+
+	fseek(f, 0, SEEK_END);
+	auto end = ftell(f);
+	rewind(f);
+	auto start = ftell(f);
+
+	auto size = end - start;
+	void* data = arena->alloc(size + 1, alignof(void*));
+	if(!data){
+		fclose(f);
+		return {};
+	}
+
+	auto n = fread(data, 1, size, f);
+
+	fclose(f);
+
+	return Slice<u8>{(u8*)data, n};
+}
+
 struct SystemStats {
 	Atomic<i32> failed_assertions = 0;
 	Atomic<i32> crc_failures = 0;
@@ -163,7 +188,6 @@ void entrypoint(){
 	String num = "42 69";
 	auto s = Slice_Stream(num.raw_bytes());
 	auto reader = s.as_stream().as_reader();
-
 
 	/*
 	auto queue = make_spsc_queue<i32>(&main_arena, 32);
