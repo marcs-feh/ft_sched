@@ -187,6 +187,8 @@ void entrypoint(){
 
 	auto bitmap = load_p5(img_data).unwrap();
 
+	auto piece = bitmap.copy_region(&main_arena, Rect{.x = 120, .y = 130, .w = 64, .h = 32}).unwrap();
+
 	/*
 	auto queue = make_spsc_queue<i32>(&main_arena, 32);
 

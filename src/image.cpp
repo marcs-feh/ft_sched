@@ -72,7 +72,7 @@ struct Bitmap {
 	// Option<Slice<RGBA8>> copy_region_padded(Arena* a, Rect rect, RGBA8 fill_value);
 
 	// Copy a rectangle from image onto arena
-	Option<Slice<u8>> copy_region(Arena* a, Rect rect);
+	Option<Bitmap> copy_region(Arena* a, Rect rect);
 
 	Rect bounds() const {
 		return {
@@ -89,7 +89,7 @@ struct Bitmap {
 };
 
 
-Option<Slice<u8>> Bitmap::copy_region(Arena* a, Rect rect){
+Option<Bitmap> Bitmap::copy_region(Arena* a, Rect rect){
 	auto intersection = rect.intersect(this->bounds());
 	auto inside = intersection == rect;
 	if(!inside){
@@ -101,18 +101,23 @@ Option<Slice<u8>> Bitmap::copy_region(Arena* a, Rect rect){
 		return {};
 	}
 
+	Bitmap bmp;
+	bmp.width = rect.w;
+	bmp.height = rect.h;
+	bmp.pixel_data = dest;
+
 	i32 y0 = rect.y;
 	i32 y1 = rect.y + rect.h;
 	i32 source_stride = this->width;
 	i32 dest_stride = rect.w;
 
 	for(isize y = y0; y < y1; y += 1){
-		auto source_row = this->pixel_data.skip(y0 * source_stride).take(rect.w);
-		auto dest_row = dest.skip(y0 * dest_stride).take(rect.w);
+		auto source_row = this->pixel_data.skip((y * source_stride) + rect.x).take(rect.w);
+		auto dest_row = dest.skip((y - y0) * dest_stride).take(rect.w);
 		copy(dest_row, source_row);
 	}
 
-	return dest;
+	return bmp;
 }
 
 struct Bitmap_Header {
