@@ -484,79 +484,6 @@ struct Array {
 	#undef ELEM_UNARY_OP
 };
 
-//// IO
-constexpr u8 io_operation_read  = 1;
-constexpr u8 io_operation_write = 2;
-constexpr u8 io_operation_close = 4;
-
-using IO_Stream_Func = isize (*)(u8 op, void* impl, Slice<u8> buf);
-
-struct IO_Reader;
-struct IO_Writer;
-
-struct IO_Stream {
-	void* _impl;
-	IO_Stream_Func _func;
-	
-	attribute_force_inline
-	isize read(Slice<u8> buf){
-		return _func(io_operation_read, _impl, buf);
-	}
-
-	attribute_force_inline
-	isize write(Slice<u8> buf){
-		return _func(io_operation_write, _impl, buf);
-	}
-
-	attribute_force_inline
-	bool close(){
-		return _func(io_operation_close, _impl, {}) >= 0;
-	}
-
-	attribute_force_inline
-	IO_Writer as_writer();
-
-	attribute_force_inline
-	IO_Reader as_reader();
-};
-
-struct IO_Reader {
-	IO_Stream _s;
-
-	attribute_force_inline
-	isize read(Slice<u8> buf){
-		return _s._func(io_operation_read, _s._impl, buf);
-	}
-
-	attribute_force_inline
-	bool close(){
-		return _s._func(io_operation_close, _s._impl, {}) >= 0;
-	}
-};
-
-struct IO_Writer {
-	IO_Stream _s;
-
-	attribute_force_inline
-	isize write(Slice<u8> buf){
-		return _s._func(io_operation_write, _s._impl, buf);
-	}
-
-	attribute_force_inline
-	bool close(){
-		return _s._func(io_operation_close, _s._impl, {}) >= 0;
-	}
-};
-
-attribute_force_inline
-inline IO_Writer IO_Stream::as_writer(){
-	return {*this};
-}
-
-attribute_force_inline
-inline IO_Reader IO_Stream::as_reader(){
-	return {*this};
-}
 
 //// Memory
 constexpr usize mem_kilobyte = 1024ll;
@@ -799,7 +726,9 @@ struct String {
 
 	String skip(usize count);
 
-	Slice<u8> raw_bytes();
+	Slice<u8> raw_bytes(){
+		return Slice<u8>{(u8*)data, len};
+	}
 
 	String clone(Arena* arena);
 
@@ -887,6 +816,127 @@ String arena_vprintf(Arena* arena, char const* fmt, va_list args);
 
 attribute_format(2, 3)
 String arena_printf(Arena* arena, char const* fmt, ...);
+
+//// IO
+constexpr u8 io_operation_read  = (1 << 0);
+constexpr u8 io_operation_write = (1 << 1);
+constexpr u8 io_operation_peek  = (1 << 2);
+constexpr u8 io_operation_close = (1 << 3);
+
+using IO_Stream_Func = isize (*)(u8 op, void* impl, Slice<u8> buf);
+
+struct IO_Reader;
+struct IO_Writer;
+
+struct IO_Stream {
+	void* _impl;
+	IO_Stream_Func _func;
+	
+	attribute_force_inline
+	isize read(Slice<u8> buf){
+		return _func(io_operation_read, _impl, buf);
+	}
+
+	attribute_force_inline
+	isize write(Slice<u8> buf){
+		return _func(io_operation_write, _impl, buf);
+	}
+
+	Option<u8> peek(){
+		isize res = _func(io_operation_peek, _impl, {});
+		if(res < 0){
+			return {};
+		}
+		return res;
+	}
+
+	attribute_force_inline
+	bool close(){
+		return _func(io_operation_close, _impl, {}) >= 0;
+	}
+
+	attribute_force_inline
+	IO_Writer as_writer();
+
+	attribute_force_inline
+	IO_Reader as_reader();
+};
+
+struct IO_Reader {
+	IO_Stream _s;
+
+	attribute_force_inline
+	isize read(Slice<u8> buf){
+		return _s._func(io_operation_read, _s._impl, buf);
+	}
+
+	attribute_force_inline
+	bool close(){
+		return _s._func(io_operation_close, _s._impl, {}) >= 0;
+	}
+
+	Option<u8> read_byte(){
+		Array<u8, 1> buf;
+		isize n = _s._func(io_operation_read, _s._impl, buf.slice());
+		if(n < 0){
+			return {};
+		}
+		else {
+			return buf[0];
+		}
+	}
+
+	String read_line(Slice<u8> buf){
+		usize cur = 0;
+
+		while(1){
+			auto c = read_byte().unwrap_or('\n');
+
+			if(c == '\n' || cur >= buf.len){
+				break;
+			}
+
+			buf[cur] = c;
+			cur += 1;
+		}
+
+		return String(buf.take(cur));
+	}
+
+	static inline
+	bool is_digit(u8 c){
+		return (c >= '0') && (c <= '9');
+	}
+
+	Option<i32> read_i32(){
+		unimplemented();
+	}
+};
+
+struct IO_Writer {
+	IO_Stream _s;
+
+	attribute_force_inline
+	isize write(Slice<u8> buf){
+		return _s._func(io_operation_write, _s._impl, buf);
+	}
+
+	attribute_force_inline
+	bool close(){
+		return _s._func(io_operation_close, _s._impl, {}) >= 0;
+	}
+};
+
+attribute_force_inline
+inline IO_Writer IO_Stream::as_writer(){
+	return {*this};
+}
+
+attribute_force_inline
+inline IO_Reader IO_Stream::as_reader(){
+	return {*this};
+}
+
 
 //// Spinlock
 

@@ -115,9 +115,37 @@ Option<Slice<u8>> Bitmap::copy_region(Arena* a, Rect rect){
 	return dest;
 }
 
+void save_p5(Bitmap const& bmp, IO_Writer writer){
+	u8 header_buf[32];
 
-void save_p5(Bitmap const& bmp, IO_Stream writer){
+	String header = buffer_printf({&header_buf[0], sizeof(header_buf)}, "P5\n%d %d\n255\n", int(bmp.width), int(bmp.height));
+	writer.write(header.raw_bytes());
+	writer.write(bmp.pixel_data);
+}
 
+Option<Bitmap> load_p5(IO_Reader reader){
+	constexpr cstring magic = "P5\n";
+	u8 file_magic[3];
+
+	auto magic_len = reader.read({&file_magic[0], 3});
+	if(magic_len != 3){
+		return {};
+	}
+
+	if(mem_compare(magic, &file_magic[0], 3) != 0){
+		return {};
+	}
+
+	/* Read width */{
+		Array<u8, 24> dimension_data = {};
+		auto buf = dimension_data.slice();
+		usize current = 0;
+		
+		reader.read_line(dimension_data.slice());
+	}
+
+
+	unimplemented();
 }
 
 // Take a rectangle piece of source and copy it onto dest at position. Returns if it could be done

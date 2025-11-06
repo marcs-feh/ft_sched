@@ -115,6 +115,9 @@ isize _io_stdout_func(u8 operation, void*, Slice<u8> buf){
 
 	case io_operation_close:
 		return -1;
+
+	case io_operation_peek:
+		return -1;
 	default:
 		return -2;
 	}
@@ -194,6 +197,7 @@ void entrypoint(){
 
 	while(1){
 		sleep_for({0});
+		break;
 	}
 }
 
