@@ -115,36 +115,47 @@ Option<Slice<u8>> Bitmap::copy_region(Arena* a, Rect rect){
 	return dest;
 }
 
-void save_p5(Bitmap const& bmp, IO_Writer writer){
-	u8 header_buf[32];
+struct Bitmap_Header {
+	u32 width;
+	u32 height;
+};
 
-	String header = buffer_printf({&header_buf[0], sizeof(header_buf)}, "P5\n%d %d\n255\n", int(bmp.width), int(bmp.height));
-	writer.write(header.raw_bytes());
-	writer.write(bmp.pixel_data);
+void bitmap_write(Bitmap const& bmp, IO_Writer w){
+	Bitmap_Header header;
+	header.width = bmp.width;
+	header.height = bmp.height;
+
+	u8 buf[sizeof(header)];
+
+	auto written = w.write({buf, sizeof(buf)});
+	ensure(written == sizeof(header), "Failed to write");
+
+	written = w.write(bmp.pixel_data);
+	ensure(written == bmp.pixel_data.len, "Failed to write");
 }
 
-Option<Bitmap> load_p5(IO_Reader reader){
-	constexpr cstring magic = "P5\n";
-	u8 file_magic[3];
-
-	auto magic_len = reader.read({&file_magic[0], 3});
-	if(magic_len != 3){
+Option<Bitmap> bitmap_load(Slice<u8> data){
+	if(data.len < sizeof(Bitmap_header)){
 		return {};
 	}
 
-	if(mem_compare(magic, &file_magic[0], 3) != 0){
+	Bitmap_Header header;
+	auto header_mem = data.take(sizeof(Bitmap_Header));
+	data = data.skip(sizeof(Bitmap_Header));
+
+	mem_copy(&header, header_mem.data, sizeof(Bitmap_Header));
+
+	auto pixel_count = header.width * header.height;
+	if(data.len < pixel_count){
 		return {};
 	}
+	auto pixels = data.take(pixel_count);
 
-	/* Read width */ {
-		Array<u8, 24> dimension_data = {};
-		auto buf = dimension_data.slice();
-		usize current = 0;
-		
-		reader.read_line(dimension_data.slice());
-	}
 
-	unimplemented();
+	Bitmap bmp;
+	bmp.pixel_data = pixels;
+	bmp.width = header.width;
+	bmp.height = header.height;
+	return bmp;
 }
-
 

@@ -460,6 +460,10 @@ struct Array {
 		return Slice<T>{ &_v[count], N - count };
 	}
 
+	T* raw_data(){
+		return &_v[0];
+	}
+
 
 	// Macro tricks to generate all operators
 	#define ELEM_WISE_OP(op, ret) constexpr auto operator op (Array<T, N> const& x) const { \
@@ -890,60 +894,6 @@ struct IO_Reader {
 		else {
 			return {u8(buf[0])};
 		}
-	}
-
-	String read_line(Slice<u8> buf){
-		usize cur = 0;
-
-		while(1){
-			auto c = read_byte().unwrap_or('\n');
-
-			if(c == '\n' || cur >= buf.len){
-				break;
-			}
-
-			buf[cur] = c;
-			cur += 1;
-		}
-
-		return String(buf.take(cur));
-	}
-
-	static inline
-	bool is_digit(u8 c){
-		return (c >= '0') && (c <= '9');
-	}
-
-	Option<i32> read_i32(){
-		Array<u8, 20> digit_buf = {};
-		usize cur = 0;
-
-		while(1){
-			auto c = this->peek().unwrap_or(0);
-			if(!c){ break; }
-			if(!is_digit(c)){
-				break;
-			}
-
-			digit_buf[cur] = c;
-			/* Discard */ this->read_byte();
-			cur += 1;
-		}
-
-		auto digits = digit_buf.take(cur);
-		if(digits.len == 0){
-			return {};
-		}
-
-		i32 acc = 0;
-		i32 power = 1;
-		for(isize i = 0; i < digits.len; i += 1){
-			auto rpos = digits.len - (i + 1);
-			acc += (digits[rpos] - '0') * power;
-			power *= 10;
-		}
-
-		return acc;
 	}
 };
 
