@@ -120,42 +120,96 @@ struct Bitmap_Header {
 	u32 height;
 };
 
-void bitmap_write(Bitmap const& bmp, IO_Writer w){
-	Bitmap_Header header;
-	header.width = bmp.width;
-	header.height = bmp.height;
-
-	u8 buf[sizeof(header)];
-
-	auto written = w.write({buf, sizeof(buf)});
-	ensure(written == sizeof(header), "Failed to write");
-
-	written = w.write(bmp.pixel_data);
-	ensure(written == bmp.pixel_data.len, "Failed to write");
+static inline
+bool is_digit(u8 c){
+	return (c >= '0') && (c <= '9');
 }
 
-Option<Bitmap> bitmap_load(Slice<u8> data){
-	if(data.len < sizeof(Bitmap_header)){
+Option<i32> parse_i32(String s){
+
+	usize digits_len = 0;
+	for(; digits_len < s.len; digits_len++){
+		if(!is_digit(s[digits_len])){
+			break;
+		}
+	}
+
+	auto digits = s.take(digits_len);
+	if(digits.len == 0){
 		return {};
 	}
 
-	Bitmap_Header header;
-	auto header_mem = data.take(sizeof(Bitmap_Header));
-	data = data.skip(sizeof(Bitmap_Header));
+	i32 acc = 0;
+	i32 power = 1;
 
-	mem_copy(&header, header_mem.data, sizeof(Bitmap_Header));
+	for(usize i = 0; i < s.len; i += 1){
+		auto rpos = s.len - (i + 1);
+		acc += (digits[rpos] - '0') * power;
+		power *= 10;
+	}
 
-	auto pixel_count = header.width * header.height;
-	if(data.len < pixel_count){
+	return Option(acc);
+}
+
+Option<Bitmap> load_p5(Slice<u8> data){
+	auto magic = String(data.take(3));
+	if(magic != "P5\n"){
 		return {};
 	}
-	auto pixels = data.take(pixel_count);
+	data = data.skip(3);
 
+	i32 width = 0;
+	i32 height = 0;
+
+	{
+		usize width_end = data.linear_search([](u8 b){
+			return b == ' ';
+		}).unwrap_or(0);
+
+		if(!width_end){
+			return {};
+		}
+
+		auto width_str = String(data.take(width_end));
+		width = parse_i32(width_str).unwrap_or(0);
+		if(!width){
+			return {};
+		}
+
+		data = data.skip(width_end);
+	}
+
+	data = data.skip(1); // space
+
+	{
+		usize height_end = data.linear_search([](u8 b){
+			return b == '\n';
+		}).unwrap_or(0);
+
+		if(!height_end){
+			return {};
+		}
+
+		auto height_str = String(data.take(height_end));
+		height = parse_i32(height_str).unwrap_or(0);
+		if(!height){
+			return {};
+		}
+
+		data = data.skip(height_end);
+	}
+
+	data = data.skip(5); // \n255\n
+
+	if(data.len < (width * height)){
+		return {};
+	}
 
 	Bitmap bmp;
-	bmp.pixel_data = pixels;
-	bmp.width = header.width;
-	bmp.height = header.height;
+	bmp.height = height;
+	bmp.width = width;
+	bmp.pixel_data = data.take(width * height);
+
 	return bmp;
 }
 

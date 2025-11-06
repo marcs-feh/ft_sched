@@ -6,13 +6,11 @@
 #include "ft_sched.hpp"
 
 #include "image.cpp"
-// #include "wav.cpp"
-
-// #include "tmr_experimental.hpp"
 
 Option<Slice<u8>> read_file_whole(cstring path, Arena* arena){
 	FILE* f = fopen(path, "rb");
 	if(!f){
+		panic("FAIL TO OPEN");
 		return {};
 	}
 
@@ -24,6 +22,7 @@ Option<Slice<u8>> read_file_whole(cstring path, Arena* arena){
 	auto size = end - start;
 	void* data = arena->alloc(size + 1, alignof(void*));
 	if(!data){
+		panic("FAIL TO ALLOC");
 		fclose(f);
 		return {};
 	}
@@ -103,7 +102,7 @@ constexpr usize task_arena_size = (max_task_count * average_stack_size) + 1024;
 
 u8 task_arena_memory[task_arena_size];
 
-constexpr usize main_arena_size = 4096;
+constexpr usize main_arena_size = 4096 * 1024;
 u8 main_arena_memory[main_arena_size];
 
 void print_info(){
@@ -155,8 +154,7 @@ IO_Stream get_stdout_stream(){
 	};
 }
 
-
-attribute_force_inline static inline
+__attribute__((never_inline)) static inline
 void entrypoint(){
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
 	task_arena = arena_from_buffer({&task_arena_memory[0], task_arena_size});
@@ -185,9 +183,9 @@ void entrypoint(){
 
 	print_info();
 
-	String num = "42 69";
-	auto s = Slice_Stream(num.raw_bytes());
-	auto reader = s.as_stream().as_reader();
+	auto img_data = read_file_whole("lena.pgm", &main_arena).unwrap();
+
+	auto bitmap = load_p5(img_data).unwrap();
 
 	/*
 	auto queue = make_spsc_queue<i32>(&main_arena, 32);

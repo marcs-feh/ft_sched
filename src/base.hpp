@@ -243,9 +243,9 @@ struct Option {
 	attribute_force_inline constexpr auto ok() const { return _has_value; }
 
 	[[nodiscard]] constexpr
-	T unwrap(){
+	T unwrap(CALLER_LOCATION){
 		if(!_has_value){
-			panic("unwrap() on empty option");
+			panic("unwrap() on empty option", caller_location);
 		}
 		auto v = ::move(_value);
 		drop();
@@ -296,6 +296,11 @@ struct Option {
 	constexpr
 	Option(T&& v)
 		: _value{::move(v)}
+		, _has_value{true} {}
+
+	constexpr
+	Option(T const& v)
+		: _value{v}
 		, _has_value{true} {}
 
 	constexpr
@@ -393,6 +398,17 @@ struct Slice {
 	T const& operator[](usize idx) const {
 		ensure(idx < len, "Out of bounds access");
 		return data[idx];
+	}
+
+	template<typename Fn>
+	Option<usize> linear_search(Fn&& predicate){
+		for(usize i = 0; i < len; i += 1){
+			if(predicate(data[i])){
+				auto pos = Option ( i );
+				return pos;
+			}
+		}
+		return {};
 	}
 
 	// Implicit conversion, these are very rare but this allows the same idiom to check for pointer null for slices as well
@@ -732,13 +748,24 @@ struct String {
 	char const* data;
 	usize len;
 
-	String slice();
+	String slice(){
+		return *this;
+	}
 
-	String slice(usize start, usize end);
+	String slice(usize start, usize end) {
+		ensure(end <= this->len && end >= start, "Invalid string indices");
+		return String{ &this->data[start], end - start };
+	}
 
-	String take(usize count);
+	String take(usize count) {
+		ensure(count <= this->len, "Cannot take more than string length");
+		return String{ this->data, count };
+	}
 
-	String skip(usize count);
+	String skip(usize count) {
+		ensure(count <= this->len, "Cannot skip more than string length");
+		return String{ &this->data[count], this->len - count };
+	}
 
 	Slice<u8> raw_bytes(){
 		return Slice<u8>{(u8*)data, len};
