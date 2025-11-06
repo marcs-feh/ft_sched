@@ -450,6 +450,16 @@ struct Array {
 		return Slice<T>(&_v[0], N);
 	}
 
+	Slice<T> take(usize count) {
+		ensure(count <= N, "Cannot take more than array length");
+		return Slice<T>{ &_v[0], count };
+	}
+
+	Slice<T> skip(usize count) {
+		ensure(count <= N, "Cannot skip more than array length");
+		return Slice<T>{ &_v[count], N - count };
+	}
+
 
 	// Macro tricks to generate all operators
 	#define ELEM_WISE_OP(op, ret) constexpr auto operator op (Array<T, N> const& x) const { \
@@ -734,14 +744,6 @@ struct String {
 
 	isize find(String sub, usize offset);
 
-	// bool starts_with(String pattern);
-
-	// bool ends_with(String pattern);
-
-	// String trim(String cutset);
-	// String trim_left(String cutset);
-	// String trim_right(String cutset);
-
 	u8 operator[](usize idx) const {
 		ensure(idx < len, "Out of bounds access");
 		return data[idx];
@@ -865,6 +867,10 @@ struct IO_Stream {
 struct IO_Reader {
 	IO_Stream _s;
 
+	Option<u8> peek(){
+		return _s.peek();
+	}
+
 	attribute_force_inline
 	isize read(Slice<u8> buf){
 		return _s._func(io_operation_read, _s._impl, buf);
@@ -882,7 +888,7 @@ struct IO_Reader {
 			return {};
 		}
 		else {
-			return buf[0];
+			return {u8(buf[0])};
 		}
 	}
 
@@ -909,7 +915,35 @@ struct IO_Reader {
 	}
 
 	Option<i32> read_i32(){
-		unimplemented();
+		Array<u8, 20> digit_buf = {};
+		usize cur = 0;
+
+		while(1){
+			auto c = this->peek().unwrap_or(0);
+			if(!c){ break; }
+			if(!is_digit(c)){
+				break;
+			}
+
+			digit_buf[cur] = c;
+			/* Discard */ this->read_byte();
+			cur += 1;
+		}
+
+		auto digits = digit_buf.take(cur);
+		if(digits.len == 0){
+			return {};
+		}
+
+		i32 acc = 0;
+		i32 power = 1;
+		for(isize i = 0; i < digits.len; i += 1){
+			auto rpos = digits.len - (i + 1);
+			acc += (digits[rpos] - '0') * power;
+			power *= 10;
+		}
+
+		return acc;
 	}
 };
 
@@ -937,6 +971,57 @@ inline IO_Reader IO_Stream::as_reader(){
 	return {*this};
 }
 
+//// Slice stream
+struct Slice_Stream {
+	Slice<u8> slice = {};
+
+	Slice_Stream(){}
+
+	IO_Stream as_stream();
+
+	explicit Slice_Stream(Slice<u8> s)
+		: slice{s}
+	{}
+};
+
+static inline
+isize _slice_stream_func(u8 operation, void* impl, Slice<u8> buf){
+	auto stream = (Slice_Stream*)impl;
+
+	Slice<u8> res = {};
+
+	switch(operation){
+	case io_operation_read:
+		res = copy(buf, stream->slice);
+		stream->slice = stream->slice.skip(res.len);
+		return res.len;
+
+	case io_operation_write:
+		res = copy(stream->slice, buf);
+		stream->slice = stream->slice.skip(res.len);
+		return res.len;
+
+	case io_operation_peek:
+		if(stream->slice.len > 0){
+			return stream->slice[0];
+		}
+		else {
+			return -1;
+		}
+		break;
+
+	case io_operation_close:
+		stream->slice = {};
+		return 0;
+
+	default:
+		return -2;
+	}
+}
+
+inline IO_Stream Slice_Stream::as_stream(){
+	return IO_Stream{this, _slice_stream_func};
+}
 
 //// Spinlock
 

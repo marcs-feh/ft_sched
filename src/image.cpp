@@ -136,7 +136,7 @@ Option<Bitmap> load_p5(IO_Reader reader){
 		return {};
 	}
 
-	/* Read width */{
+	/* Read width */ {
 		Array<u8, 24> dimension_data = {};
 		auto buf = dimension_data.slice();
 		usize current = 0;
@@ -144,9 +144,7 @@ Option<Bitmap> load_p5(IO_Reader reader){
 		reader.read_line(dimension_data.slice());
 	}
 
-
 	unimplemented();
 }
 
-// Take a rectangle piece of source and copy it onto dest at position. Returns if it could be done
 

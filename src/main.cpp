@@ -130,6 +130,7 @@ IO_Stream get_stdout_stream(){
 	};
 }
 
+
 attribute_force_inline static inline
 void entrypoint(){
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
@@ -158,6 +159,11 @@ void entrypoint(){
 	#endif
 
 	print_info();
+
+	String num = "42 69";
+	auto s = Slice_Stream(num.raw_bytes());
+	auto reader = s.as_stream().as_reader();
+
 
 	/*
 	auto queue = make_spsc_queue<i32>(&main_arena, 32);
