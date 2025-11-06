@@ -160,25 +160,25 @@ void entrypoint(){
 	task_arena = arena_from_buffer({&task_arena_memory[0], task_arena_size});
 
 	#if defined(FT_SCHED_PLATFORM_STM32F411CEU6)
-	for(int i = 5; i > 0; i --){
-		sleep_for(Duration::from_milli(1'000)); printf("%d\r\n", i); fflush(stdout);
-	}
+		for(int i = 5; i > 0; i --){
+			sleep_for(Duration::from_milli(1'000)); printf("%d\r\n", i); fflush(stdout);
+		}
 	#else
-	swdg_init(Duration::from_milli(1'000));
-	DeadlineWatcher* watcher = make_deadline_watcher(&task_arena, 32);
-	ensure(watcher != nullptr, "Failed to create watcher");
-	auto watcher_task = make_basic_task(&task_arena, [watcher](TaskContext){
-		while(1){
-			auto ok = watcher->scan();
-			if(ok){
-				swdg_reset();
+		swdg_init(Duration::from_milli(1'000));
+		DeadlineWatcher* watcher = make_deadline_watcher(&task_arena, 32);
+		ensure(watcher != nullptr, "Failed to create watcher");
+		auto watcher_task = make_basic_task(&task_arena, [watcher](TaskContext){
+			while(1){
+				auto ok = watcher->scan();
+				if(ok){
+					swdg_reset();
+				}
+
+				sleep_for(Duration::from_milli(1));
 			}
 
-			sleep_for(Duration::from_milli(1));
-		}
-
-		return Unit{};
-	});
+			return Unit{};
+		});
 	#endif
 
 	print_info();
@@ -187,44 +187,14 @@ void entrypoint(){
 
 	auto bitmap = load_p5(img_data).unwrap();
 
-	auto piece = bitmap.copy_region(&main_arena, Rect{.x = 120, .y = 130, .w = 64, .h = 32}).unwrap();
+	auto piece = bitmap.copy_region(&main_arena, {.x = 120, .y = 80, .w = 80, .h = 60}).unwrap();
 
-	/*
-	auto queue = make_spsc_queue<i32>(&main_arena, 32);
+	auto stream = get_stdout_stream();
+	
+	save_p5(piece, stream.as_writer());
 
-	bool tasks_running = true;
-	auto producer = make_basic_task(&task_arena, [&tasks_running, queue](TaskContext ctx){
-		int n = 0;
-		while(tasks_running){
-			queue->try_push(n);
-			n += 1;
-			sleep_for(Duration::from_milli(100));
-		}
 
-		return Unit{};
-	});
-
-	auto consumer = make_basic_task(&task_arena, [&tasks_running, queue](TaskContext ctx){
-		while(tasks_running){
-			auto p = queue->pop();
-
-			if(p){
-				printf("%d\r\n", 2 * p.unwrap());
-			}
-			else {
-				printf("-\r\n");
-			}
-
-			sleep_for(Duration::from_milli(100));
-		}
-
-		return Unit{};
-	});
-	*/
-
-	printf("----- FINISHED -----\r\n");
 	fflush(stdout);
-
 	while(1){
 		sleep_for({0});
 		break;

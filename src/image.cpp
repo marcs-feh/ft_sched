@@ -218,3 +218,9 @@ Option<Bitmap> load_p5(Slice<u8> data){
 	return bmp;
 }
 
+void save_p5(Bitmap const& bmp, IO_Writer w){
+	Array<u8, 32> headerbuf;
+	auto header = buffer_printf(headerbuf.slice(), "P5\n%d %d\n255\n", int(bmp.width), int(bmp.height));
+	w.write(header.raw_bytes());
+	w.write(bmp.pixel_data());
+}
