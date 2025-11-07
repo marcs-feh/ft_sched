@@ -9,10 +9,10 @@
 			"name": "Build",
 			"working_dir": "$project_path/src",
 			"linux": {
-				"shell_cmd": "lua build.lua linux && build/ft_sched.exe",
+				"shell_cmd": "lua build.lua linux -verbose && build/ft_sched.exe",
 			},
 			"windows": {
-				"shell_cmd": "lua build.lua windows && build\\ft_sched.exe",
+				"shell_cmd": "lua build.lua windows -verbose && build\\ft_sched.exe",
 			}
 		},
 		{

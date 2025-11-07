@@ -7,6 +7,46 @@
 
 #include "image.cpp"
 
+template<int N>
+struct Convolution_Context {
+	Array<f32, N * N> kernel;
+	Bitmap input;
+	Arena* scratch;
+
+	Rect rect_of(i32 x, i32 y){
+		return {
+			.x = x - N/2,
+			.y = y - N/2,
+			.w = N,
+			.h = N,
+		};
+	}
+
+	u8 get(i32 x, i32 y){
+		auto r = rect_of(x, y);
+		auto region = input.copy_region_padded(scratch, r, 0x00);
+		if(!region){
+			return 0;
+		}
+		auto data = region.unwrap().pixel_data;
+		Array<f32, N * N> norm_data;
+
+		ensure(data.len == (N*N), "Mismatched lengths");
+		for(usize i = 0; i < data.len; i += 1){
+			norm_data[i] = f32(data[i]) / 255.0f;
+		}
+
+		auto res = norm_data * kernel;
+		f32 acc = 0;
+		for(usize i = 0; i < (N * N); i += 1){
+			acc += res[i];
+		}
+
+		scratch->reset();
+		return u8(clamp<f32>(0, acc * 255, 255));
+	}
+};
+
 Option<Slice<u8>> read_file_whole(cstring path, Arena* arena){
 	FILE* f = fopen(path, "rb");
 	if(!f){
@@ -132,7 +172,7 @@ static inline
 isize _io_stdout_func(u8 operation, void*, Slice<u8> buf){
 	switch(operation){
 	case io_operation_write:
-		return printf("%.*s", int(buf.len), cstring(buf.data));
+		return fwrite(buf.data, 1, buf.len, stdout);
 
 	case io_operation_read:
 		return -1;
@@ -159,7 +199,7 @@ isize _io_file_writer_func(u8 operation, void* handle, Slice<u8> buf){
 	FILE* file = (FILE*)handle;
 	switch(operation){
 	case io_operation_write:
-		return fprintf(file, "%.*s", int(buf.len), cstring(buf.data));
+		return fwrite(buf.data, 1, buf.len, file);
 
 	case io_operation_read:
 		return -1;
@@ -220,12 +260,40 @@ void entrypoint(){
 		});
 	#endif
 
-
 	auto img_data = read_file_whole("lena.pgm", &main_arena).unwrap();
 
 	auto bitmap = load_p5(img_data).unwrap();
-	auto piece = bitmap.copy_region_padded(&main_arena, {.x = -1, .y = -20, .w = i32(bitmap.width) + 40, .h = i32(bitmap.height) + 40}, 0x00).unwrap();
-	dump_bitmap(piece);
+	auto output = bitmap.copy(&main_arena).unwrap();
+
+	Convolution_Context<3> conv;
+	conv.input = bitmap;
+	conv.scratch = main_arena.make_sub(1024);
+	conv.kernel = Array<f32, 9>{
+		-1.0f, 2.0f, -1.0f,
+		0.0f, 0.0f, 0.0f,
+		-1.0f, 2.0f, -1.0f,
+	} / splat<f32, 9>(4.0f);
+
+	for(usize x = 0; x < bitmap.width; x++){
+		for(usize y = 0; y < bitmap.width; y++){
+			output.pixel_data[(y * output.width) + x] = conv.get(x, y);
+		}
+	}
+	mem_set(output.pixel_data.skip(5030).data, 0xff, 200);
+
+	conv.kernel = Array<f32, 9>{
+		-1.0f, 0.0f, -1.0f,
+		2.0f, 0.0f, 2.0f,
+		-1.0f, 0.0f, -1.0f,
+	} / splat<f32, 9>(4.0f);
+
+	for(usize x = 0; x < bitmap.width; x++){
+		for(usize y = 0; y < bitmap.width; y++){
+			output.pixel_data[(y * output.width) + x] += conv.get(x, y);
+		}
+	}
+
+	dump_bitmap(output);
 
 	fflush(stdout);
 	while(1){

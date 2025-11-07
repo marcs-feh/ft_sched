@@ -1,10 +1,10 @@
 // raddbg 0.9.23 project file
 
-recent_file: path: "src/image.cpp"
 recent_file: path: "src/main.cpp"
+recent_file: path: "src/image.cpp"
+recent_file: path: "d:/os/obj/amd64fre/minkernel/crts/ucrt/src/appcrt/startup/mt/objfre/amd64/minkernel/crts/ucrt/src/appcrt/startup/abort.cpp"
 recent_file: path: "src/base.hpp"
 recent_file: path: "D:/a/_work/1/s/src/vctools/crt/vcstartup/src/startup/exe_common.inl"
-recent_file: path: "d:/os/obj/amd64fre/minkernel/crts/ucrt/src/appcrt/startup/mt/objfre/amd64/minkernel/crts/ucrt/src/appcrt/startup/abort.cpp"
 recent_file: path: "src/platform_windows.cpp"
 recent_file: path: "src/base.cpp"
 recent_file: path: "src/task.cpp"
@@ -18,16 +18,16 @@ target:
 }
 breakpoint:
 {
-  source_location: "src/main.cpp:228:1"
+  address_location: dump_bitmap
   hit_count: 0
 }
 breakpoint:
 {
-  address_location: "Bitmap::copy_region"
-  hit_count: 1
+  source_location: "src/main.cpp:281:1"
+  hit_count: 2
 }
 breakpoint:
 {
-  source_location: "src/image.cpp:120:1"
+  source_location: "src/main.cpp:268:1"
   hit_count: 1
 }

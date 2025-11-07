@@ -71,10 +71,12 @@ struct Bitmap {
 	// Copy a rectangle from image onto arena, the outside region of the rectangle is filled with a provided default value
 	// Option<Slice<RGBA8>> copy_region_padded(Arena* a, Rect rect, RGBA8 fill_value);
 
-	// Copy a rectangle from image onto arena
+	Option<Bitmap> copy(Arena* a);
+
 	Option<Bitmap> copy_region(Arena* a, Rect rect);
 
 	Option<Bitmap> copy_region_padded(Arena* a, Rect rect, u8 val);
+
 
 	Rect bounds() const {
 		return {
@@ -89,6 +91,19 @@ struct Bitmap {
 		, height{0}
 	{}
 };
+
+Option<Bitmap> Bitmap::copy(Arena* a){
+	auto data = make_slice<u8>(a, this->width * this->height);
+	if(!data){
+		return {};
+	}
+
+	Bitmap bmp;
+	mem_copy(&bmp, this, sizeof(*this));
+	bmp.pixel_data = ::copy(data, this->pixel_data);
+
+	return bmp;
+}
 
 Option<Bitmap> Bitmap::copy_region(Arena* a, Rect rect){
 	auto intersection = rect.intersect(this->bounds());
@@ -115,7 +130,7 @@ Option<Bitmap> Bitmap::copy_region(Arena* a, Rect rect){
 	for(isize y = y0; y < y1; y += 1){
 		auto source_row = this->pixel_data.skip((y * source_stride) + rect.x).take(rect.w);
 		auto dest_row = dest.skip((y - y0) * dest_stride).take(rect.w);
-		copy(dest_row, source_row);
+		::copy(dest_row, source_row);
 	}
 
 	return bmp;
@@ -148,7 +163,7 @@ Option<Bitmap> Bitmap::copy_region_padded(Arena* a, Rect rect, u8 val){
 	for(isize y = y0; y < y1; y += 1){
 		auto source_row = this->pixel_data.skip((y * source_stride) + intersection.x).take(intersection.w);
 		auto dest_row = dest.skip((y - y0 - yd) * dest_stride - xd).take(intersection.w);
-		copy(dest_row, source_row);
+		::copy(dest_row, source_row);
 	}
 
 	return bmp;

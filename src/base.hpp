@@ -484,13 +484,13 @@ struct Array {
 	// Macro tricks to generate all operators
 	#define ELEM_WISE_OP(op, ret) constexpr auto operator op (Array<T, N> const& x) const { \
 		Array<ret, N> res; \
-		for(int i = 0; i < N; ++i) res[i] = _v[i] op x._v[i]; \
+		for(unsigned int i = 0; i < N; ++i) res[i] = _v[i] op x._v[i]; \
 		return res; \
 	}
 
 	#define ELEM_UNARY_OP(op, ret) constexpr auto operator op () const { \
 		Array<ret, N> res; \
-		for(int i = 0; i < N; ++i) res[i] = op _v[i]; \
+		for(unsigned int i = 0; i < N; ++i) res[i] = op _v[i]; \
 		return res; \
 	}
 
@@ -513,6 +513,13 @@ struct Array {
 	#undef ELEM_WISE_OP
 	#undef ELEM_UNARY_OP
 };
+
+template<typename T, unsigned int N> constexpr
+Array<T, N> splat(T value){
+	Array<T, N> res;
+	for(unsigned int i = 0; i < N; ++i){ res._v[i] = value; }
+	return res;
+}
 
 
 //// Memory
