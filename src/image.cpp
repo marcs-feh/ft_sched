@@ -74,6 +74,8 @@ struct Bitmap {
 	// Copy a rectangle from image onto arena
 	Option<Bitmap> copy_region(Arena* a, Rect rect);
 
+	Option<Bitmap> copy_region_padded(Arena* a, Rect rect, u8 val);
+
 	Rect bounds() const {
 		return {
 			.x = 0, .y =0,
@@ -87,7 +89,6 @@ struct Bitmap {
 		, height{0}
 	{}
 };
-
 
 Option<Bitmap> Bitmap::copy_region(Arena* a, Rect rect){
 	auto intersection = rect.intersect(this->bounds());
@@ -114,6 +115,36 @@ Option<Bitmap> Bitmap::copy_region(Arena* a, Rect rect){
 	for(isize y = y0; y < y1; y += 1){
 		auto source_row = this->pixel_data.skip((y * source_stride) + rect.x).take(rect.w);
 		auto dest_row = dest.skip((y - y0) * dest_stride).take(rect.w);
+		copy(dest_row, source_row);
+	}
+
+	return bmp;
+}
+
+Option<Bitmap> Bitmap::copy_region_padded(Arena* a, Rect rect, u8 val){
+	auto intersection = rect.intersect(this->bounds());
+
+	auto dest = make_slice<u8>(a, rect.area());
+	if(!dest){
+		return {};
+	}
+	mem_set(dest.data, val, dest.len);
+
+	Bitmap bmp;
+	bmp.width = rect.w;
+	bmp.height = rect.h;
+	bmp.pixel_data = dest;
+
+	i32 y0 = intersection.y;
+	i32 y1 = intersection.y + intersection.h;
+	i32 source_stride = this->width;
+	i32 dest_stride = rect.w;
+
+	i32 xd = rect.x - intersection.x;
+	i32 yd = rect.y - intersection.y;
+	for(isize y = y0; y < y1; y += 1){
+		auto source_row = this->pixel_data.skip((y * source_stride) + intersection.x).take(intersection.w);
+		auto dest_row = dest.skip((y - y0 - yd) * dest_stride - xd).take(intersection.w);
 		copy(dest_row, source_row);
 	}
 
@@ -222,5 +253,5 @@ void save_p5(Bitmap const& bmp, IO_Writer w){
 	Array<u8, 32> headerbuf;
 	auto header = buffer_printf(headerbuf.slice(), "P5\n%d %d\n255\n", int(bmp.width), int(bmp.height));
 	w.write(header.raw_bytes());
-	w.write(bmp.pixel_data());
+	w.write(bmp.pixel_data);
 }

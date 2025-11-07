@@ -154,6 +154,44 @@ IO_Stream get_stdout_stream(){
 	};
 }
 
+static inline
+isize _io_file_writer_func(u8 operation, void* handle, Slice<u8> buf){
+	FILE* file = (FILE*)handle;
+	switch(operation){
+	case io_operation_write:
+		return fprintf(file, "%.*s", int(buf.len), cstring(buf.data));
+
+	case io_operation_read:
+		return -1;
+
+	case io_operation_close:
+		fclose(file);
+		return 0;
+
+	case io_operation_peek:
+		return -1;
+	default:
+		return -2;
+	}
+}
+
+IO_Writer get_file_writer(cstring path){
+	FILE* f = fopen(path, "wb");
+	ensure(f, "Failed to open");
+	auto s = IO_Stream{
+		._impl = (void*)f,
+		._func = _io_file_writer_func,
+	}
+	;
+	return s.as_writer();
+}
+
+void dump_bitmap(Bitmap const& bmap){
+	auto writer = get_file_writer("out.pgm");
+	save_p5(bmap, writer);
+	writer.close();
+}
+
 __attribute__((never_inline)) static inline
 void entrypoint(){
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
@@ -163,6 +201,7 @@ void entrypoint(){
 		for(int i = 5; i > 0; i --){
 			sleep_for(Duration::from_milli(1'000)); printf("%d\r\n", i); fflush(stdout);
 		}
+		print_info();
 	#else
 		swdg_init(Duration::from_milli(1'000));
 		DeadlineWatcher* watcher = make_deadline_watcher(&task_arena, 32);
@@ -181,18 +220,12 @@ void entrypoint(){
 		});
 	#endif
 
-	print_info();
 
 	auto img_data = read_file_whole("lena.pgm", &main_arena).unwrap();
 
 	auto bitmap = load_p5(img_data).unwrap();
-
-	auto piece = bitmap.copy_region(&main_arena, {.x = 120, .y = 80, .w = 80, .h = 60}).unwrap();
-
-	auto stream = get_stdout_stream();
-	
-	save_p5(piece, stream.as_writer());
-
+	auto piece = bitmap.copy_region_padded(&main_arena, {.x = -20, .y = -20, .w = i32(bitmap.width) + 40, .h = i32(bitmap.height) + 40}, 0xff).unwrap();
+	dump_bitmap(piece);
 
 	fflush(stdout);
 	while(1){
