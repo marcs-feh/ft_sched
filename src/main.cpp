@@ -224,7 +224,7 @@ void entrypoint(){
 	auto img_data = read_file_whole("lena.pgm", &main_arena).unwrap();
 
 	auto bitmap = load_p5(img_data).unwrap();
-	auto piece = bitmap.copy_region_padded(&main_arena, {.x = -20, .y = -20, .w = i32(bitmap.width) + 40, .h = i32(bitmap.height) + 40}, 0xff).unwrap();
+	auto piece = bitmap.copy_region_padded(&main_arena, {.x = -1, .y = -20, .w = i32(bitmap.width) + 40, .h = i32(bitmap.height) + 40}, 0x00).unwrap();
 	dump_bitmap(piece);
 
 	fflush(stdout);

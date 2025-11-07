@@ -123,6 +123,9 @@ Option<Bitmap> Bitmap::copy_region(Arena* a, Rect rect){
 
 Option<Bitmap> Bitmap::copy_region_padded(Arena* a, Rect rect, u8 val){
 	auto intersection = rect.intersect(this->bounds());
+	if(!intersection.valid()){
+		return {};
+	}
 
 	auto dest = make_slice<u8>(a, rect.area());
 	if(!dest){
