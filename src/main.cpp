@@ -22,7 +22,7 @@ struct Convolution_Context {
 		};
 	}
 
-	u8 get(i32 x, i32 y){
+	i32 get(i32 x, i32 y){
 		auto r = rect_of(x, y);
 		auto region = input.copy_region_padded(scratch, r, 0x00);
 		if(!region){
@@ -32,6 +32,7 @@ struct Convolution_Context {
 		Array<f32, N * N> norm_data;
 
 		ensure(data.len == (N*N), "Mismatched lengths");
+
 		for(usize i = 0; i < data.len; i += 1){
 			norm_data[i] = f32(data[i]) / 255.0f;
 		}
@@ -43,7 +44,7 @@ struct Convolution_Context {
 		}
 
 		scratch->reset();
-		return u8(clamp<f32>(0, acc * 255, 255));
+		return i32(clamp<f32>(0, acc * 255, 255));
 	}
 };
 
@@ -265,30 +266,26 @@ void entrypoint(){
 	auto bitmap = load_p5(img_data).unwrap();
 	auto output = bitmap.copy(&main_arena).unwrap();
 
-	Convolution_Context<3> conv;
-	conv.input = bitmap;
-	conv.scratch = main_arena.make_sub(1024);
-	conv.kernel = Array<f32, 9>{
-		-1.0f, 2.0f, -1.0f,
+	Convolution_Context<3> conv_horiz;
+	conv_horiz.input = bitmap;
+	conv_horiz.scratch = main_arena.make_sub(512);
+	conv_horiz.kernel = Array<f32, 9>{
+		-1.0f, -2.0f, -1.0f,
 		0.0f, 0.0f, 0.0f,
-		-1.0f, 2.0f, -1.0f,
+		+1.0f, +2.0f, +1.0f,
+	} / splat<f32, 9>(4.0f);
+
+	Convolution_Context<3> conv_vert = conv_horiz;
+	conv_vert.scratch = main_arena.make_sub(512);
+	conv_vert.kernel = Array<f32, 9>{
+		-1.0f, 0.0f, +1.0f,
+		-2.0f, 0.0f, +2.0f,
+		-1.0f, 0.0f, +1.0f,
 	} / splat<f32, 9>(4.0f);
 
 	for(usize x = 0; x < bitmap.width; x++){
 		for(usize y = 0; y < bitmap.width; y++){
-			output.pixel_data[(y * output.width) + x] = conv.get(x, y);
-		}
-	}
-
-	conv.kernel = Array<f32, 9>{
-		-1.0f, 0.0f, -1.0f,
-		2.0f, 0.0f, 2.0f,
-		-1.0f, 0.0f, -1.0f,
-	} / splat<f32, 9>(4.0f);
-
-	for(usize x = 0; x < bitmap.width; x++){
-		for(usize y = 0; y < bitmap.width; y++){
-			output.pixel_data[(y * output.width) + x] += conv.get(x, y);
+			output.pixel_data[(y * output.width) + x] = clamp(0, (conv_horiz.get(x, y) + conv_vert.get(x, y)), 255);
 		}
 	}
 

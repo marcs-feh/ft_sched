@@ -58,8 +58,13 @@ concept PixelFunc = requires(F f, u8 px){
 
 struct Bitmap {
 	Slice<u8> pixel_data;
-	u32 width;
-	u32 height;
+	i32 width;
+	i32 height;
+
+	u8 get(i32 x, i32 y){
+		ensure(x < width && y < height && x >= 0 && y >= 0, "Out of bounds access to bitmap");
+		return pixel_data[(y * width) + x];
+	}
 
 	template<PixelFunc Func>
 	void apply_pixel_transform(Func&& f){
@@ -170,8 +175,8 @@ Option<Bitmap> Bitmap::copy_region_padded(Arena* a, Rect rect, u8 val){
 }
 
 struct Bitmap_Header {
-	u32 width;
-	u32 height;
+	i32 width;
+	i32 height;
 };
 
 static inline
