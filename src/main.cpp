@@ -279,7 +279,6 @@ void entrypoint(){
 			output.pixel_data[(y * output.width) + x] = conv.get(x, y);
 		}
 	}
-	mem_set(output.pixel_data.skip(5030).data, 0xff, 200);
 
 	conv.kernel = Array<f32, 9>{
 		-1.0f, 0.0f, -1.0f,
