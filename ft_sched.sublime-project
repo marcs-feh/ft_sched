@@ -12,7 +12,7 @@
 				"shell_cmd": "lua build.lua linux -verbose && build/ft_sched.exe",
 			},
 			"windows": {
-				"shell_cmd": "lua build.lua windows -verbose && build\\ft_sched.exe",
+				"shell_cmd": "raddbg --ipc kill_all && lua build.lua windows -verbose && build\\ft_sched.exe",
 			}
 		},
 		{

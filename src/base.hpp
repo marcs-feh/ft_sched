@@ -79,7 +79,7 @@ static_assert(Atomic<isize>::is_always_lock_free, "Expected isize to be always l
 static_assert(Atomic<bool>::is_always_lock_free, "Expected bool to be always lock-free");
 
 //// Source location
-#define CALLER_LOCATION std::source_location const& caller_location = std::source_location::current()
+#define CALLER_LOCATION [[maybe_unused]] std::source_location const& caller_location = std::source_location::current()
 
 //// Type traits
 

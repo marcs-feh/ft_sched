@@ -192,7 +192,7 @@ void do_regular_conv(){
 	auto image_check_value = crc32(image);
 
 	auto output = image.copy(&main_arena).unwrap();
-	Convolution_Context<3> conv_horiz;
+	Convolution_Context<3> conv_horiz{};
 
 	conv_horiz.input = image;
 	conv_horiz.scratch = main_arena.make_sub(100);

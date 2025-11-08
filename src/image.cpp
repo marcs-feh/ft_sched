@@ -362,4 +362,12 @@ struct Convolution_Context{
 		scratch->reset();
 		return i32(clamp<f32>(0, acc * 255, 255));
 	}
+
+	Convolution_Context()
+		: _kernel{}
+		, _kernel_check_value{}
+		, input{}
+		, scratch{}
+		, context{}
+	{}
 };

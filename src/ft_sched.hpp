@@ -128,12 +128,20 @@ struct RawTask {
 
 	void join(CALLER_LOCATION) {
 		auto ok = _platform_join();
-		ensure(ok, "Failed to join thread", caller_location);
+		if(!ok){
+			error_printf(caller_location.file_name(), caller_location.line(),
+				"[Task %2d] Failed to join task\r\n", int(id)
+			);
+		}
 	}
 
 	void cancel(CALLER_LOCATION){
 		auto ok = _platform_cancel();
-		ensure(ok, "Failed to cancel thread", caller_location);
+		if(!ok){
+			error_printf(caller_location.file_name(), caller_location.line(),
+				"[Task %2d] Failed to cancel task\r\n", int(id)
+			);
+		}
 	}
 
 	~RawTask(){}
@@ -183,7 +191,7 @@ struct TaskContext {
 			"[Task %2d] Panic: %s\r\n",
 			int(task->id), msg
 		);
-		task->cancel();
+		task->cancel(caller_location);
 	}
 
 	u32 id() const {
@@ -222,19 +230,19 @@ u32 crc32(T const& obj){
 
 template<typename T>
 	requires CRC32_Checkable<T>
-void crc32_ensure(u32 expected, T const& obj){
+void crc32_ensure(u32 expected, T const& obj, CALLER_LOCATION){
     volatile u32 cur = CRC32<T>{}.get(obj);
     if(expected != cur){
-        panic("Failed CRC32 check");
+        panic("Failed CRC32 check", caller_location);
     }
 }
 
 template<typename T>
 	requires CRC32_Checkable<T>
-void crc32_ensure(u32 expected, CRC32_Checkable auto const& obj, TaskContext* ctx){
+void crc32_ensure(u32 expected, CRC32_Checkable auto const& obj, TaskContext* ctx, CALLER_LOCATION){
     volatile u32 cur = CRC32<T>{}.get(obj);
     if(expected != cur){
-        ctx->panic("Failed CRC32 check");
+        ctx->panic("Failed CRC32 check", caller_location);
     }
 }
 
