@@ -97,6 +97,19 @@ struct Bitmap {
 	{}
 };
 
+template<>
+struct CRC32<Bitmap>{
+	u32 get(Bitmap const& bmp){
+		Array<u8, 8> dimensions;
+		mem_copy(dimensions.slice(0, 4).data, &bmp.width, sizeof(bmp.width));
+		mem_copy(dimensions.slice(4, 8).data, &bmp.height, sizeof(bmp.height));
+
+		auto check = crc32(dimensions.slice());
+		check = crc32_advance(check, bmp.pixel_data);
+		return check;
+	}
+};
+
 Option<Bitmap> Bitmap::copy(Arena* a){
 	auto data = make_slice<u8>(a, this->width * this->height);
 	if(!data){
@@ -260,7 +273,7 @@ Option<Bitmap> load_p5(Slice<u8> data){
 
 	data = data.skip(5); // \n255\n
 
-	if(data.len < (width * height)){
+	if(data.len < usize(width * height)){
 		return {};
 	}
 
@@ -278,3 +291,75 @@ void save_p5(Bitmap const& bmp, IO_Writer w){
 	w.write(header.raw_bytes());
 	w.write(bmp.pixel_data);
 }
+
+constexpr bool enable_crc_checks = true;
+
+template<unsigned int N>
+struct CRC32<Array<f32, N>>{
+	u32 get(Array<f32, N> const& arr){
+		Array<u8, N * sizeof(f32)> buf;
+
+		mem_copy(&buf._v[0], &arr._v[0], N * sizeof(f32));
+
+		return CRC32<Slice<u8>>{}.get(buf.slice());
+	}
+};
+
+template<int N>
+struct Convolution_Context{
+	Array<f32, N * N> _kernel;
+	volatile u32 _kernel_check_value;
+	Bitmap input;
+	Arena* scratch;
+	TaskContext* context;
+
+	static_assert(CRC32_Checkable<Array<f32, N * N>>, "Not checkable");
+
+	Rect rect_of(i32 x, i32 y){
+		return {
+			.x = x - N/2,
+			.y = y - N/2,
+			.w = N,
+			.h = N,
+		};
+	}
+
+	void use_kernel(Array<f32, N * N> const& k){
+		_kernel = k;
+		_kernel_check_value = CRC32<Array<f32, N * N>>{}.get(k);
+	}
+
+	i32 get(i32 x, i32 y){
+		if constexpr(enable_crc_checks) {
+			COMPILER_MEMORY_BARRIER();
+			if(context)
+				crc32_ensure<Array<f32, N*N>>(_kernel_check_value, _kernel, context);
+			else
+				crc32_ensure<Array<f32, N*N>>(_kernel_check_value, _kernel);
+			COMPILER_MEMORY_BARRIER();
+		}
+
+		auto r = rect_of(x, y);
+		auto region = input.copy_region_padded(scratch, r, 0x00);
+		if(!region){
+			return 0;
+		}
+		auto data = region.unwrap().pixel_data;
+		Array<f32, N * N> norm_data;
+
+		ensure(data.len == (N*N), "Mismatched lengths");
+
+		for(usize i = 0; i < data.len; i += 1){
+			norm_data[i] = f32(data[i]) / 255.0f;
+		}
+
+		auto res = norm_data * _kernel;
+		f32 acc = 0;
+		for(usize i = 0; i < (N * N); i += 1){
+			acc += res[i];
+		}
+
+		scratch->reset();
+		return i32(clamp<f32>(0, acc * 255, 255));
+	}
+};

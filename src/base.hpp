@@ -465,6 +465,11 @@ struct Array {
 	Slice<T> slice(){
 		return Slice<T>(&_v[0], N);
 	}
+	
+	Slice<T> slice(usize start, usize end) {
+		ensure(end <= N && end >= start, "Invalid slicing indices");
+		return Slice<T>{ &_v[start], end - start };
+	}
 
 	Slice<T> take(usize count) {
 		ensure(count <= N, "Cannot take more than array length");
@@ -479,7 +484,6 @@ struct Array {
 	T* raw_data(){
 		return &_v[0];
 	}
-
 
 	// Macro tricks to generate all operators
 	#define ELEM_WISE_OP(op, ret) constexpr auto operator op (Array<T, N> const& x) const { \

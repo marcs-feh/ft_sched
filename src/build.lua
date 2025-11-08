@@ -42,7 +42,7 @@ function main()
 
 	if flags.generate then
 		generate_crc32()
-		generate_wav_data()
+		generate_image_data()
 	end
 
 	local target_name = ('%s/%s'):format(titlecase(build_mode), titlecase(platform))
@@ -106,6 +106,7 @@ function execute_build(flash_serial, verbose)
 		cflags[#cflags+1] = '-O0'
 	elseif build_mode == 'release' then
 		cflags[#cflags+1] = '-Os'
+		cflags[#cflags+1] = '-g'
 	end
 
 	cflags = join_list(cflags, wflags)
@@ -143,15 +144,16 @@ function execute_build(flash_serial, verbose)
 	exec:wait()
 end
 
-function generate_wav_data()
-	local name = 'scattered_and_lost'
-	local data = c_embed(name .. '.wav')
-	local f = io.open(name .. '.wav.cpp', 'wb')
-	f:write(('static const unsigned char %s_wav_data[] = '):format(name))
+function generate_image_data()
+	local file = 'lena.pgm'
+	local data = c_embed(file);
+	local f = io.open(file .. '.cpp', 'wb')
+	f:write('static u8 image_pgm_data_storage[] = ')
 	f:write(data)
 	f:write(';\n\n')
+	f:write('static Slice<u8> image_pgm_data = {&image_pgm_data_storage[0], sizeof(image_pgm_data_storage)};\n')
 	f:close()
-	print(('Generated %s.wav.cpp'):format(name))
+	print(('Generated %s.cpp'):format(file))
 end
 
 function generate_crc32()

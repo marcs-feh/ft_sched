@@ -7,47 +7,6 @@
 
 #include "image.cpp"
 
-template<int N>
-struct Convolution_Context {
-	Array<f32, N * N> kernel;
-	Bitmap input;
-	Arena* scratch;
-
-	Rect rect_of(i32 x, i32 y){
-		return {
-			.x = x - N/2,
-			.y = y - N/2,
-			.w = N,
-			.h = N,
-		};
-	}
-
-	i32 get(i32 x, i32 y){
-		auto r = rect_of(x, y);
-		auto region = input.copy_region_padded(scratch, r, 0x00);
-		if(!region){
-			return 0;
-		}
-		auto data = region.unwrap().pixel_data;
-		Array<f32, N * N> norm_data;
-
-		ensure(data.len == (N*N), "Mismatched lengths");
-
-		for(usize i = 0; i < data.len; i += 1){
-			norm_data[i] = f32(data[i]) / 255.0f;
-		}
-
-		auto res = norm_data * kernel;
-		f32 acc = 0;
-		for(usize i = 0; i < (N * N); i += 1){
-			acc += res[i];
-		}
-
-		scratch->reset();
-		return i32(clamp<f32>(0, acc * 255, 255));
-	}
-};
-
 Option<Slice<u8>> read_file_whole(cstring path, Arena* arena){
 	FILE* f = fopen(path, "rb");
 	if(!f){
@@ -99,8 +58,6 @@ struct SystemStats {
 };
 
 SystemStats sys_statistics;
-
-extern "C" int puts(char const*);
 
 template<class T>
 void print_slice(Slice<T> slice, char const* elem_fmt){
@@ -159,15 +116,10 @@ void print_info(){
 	// msg = buffer_printf(buf, "  WAV file size:   %td", sizeof(scattered_and_lost_wav_data)); printf("%s\r\n", msg.data);
 }
 
-constexpr f64 pi = 3.14159265358979323846264338327950288;
-constexpr f64 tau = 2.0 * pi;
-constexpr f64 euler = 2.71828182845904523536028747135266249;
-
 constexpr f64 gaussian(f64 peak, f64 stddev, f64 x){
 	auto exponent = - (x*x) / (2 * stddev * stddev);
 	return peak * exp(exponent);
 }
-
 
 static inline
 isize _io_stdout_func(u8 operation, void*, Slice<u8> buf){
@@ -233,63 +185,76 @@ void dump_bitmap(Bitmap const& bmap){
 	writer.close();
 }
 
-__attribute__((never_inline)) static inline
+#include "lena.pgm.cpp"
+
+void do_regular_conv(){
+	auto image = load_p5(image_pgm_data).unwrap();
+	auto image_check_value = crc32(image);
+
+	auto output = image.copy(&main_arena).unwrap();
+	Convolution_Context<3> conv_horiz;
+
+	conv_horiz.input = image;
+	conv_horiz.scratch = main_arena.make_sub(100);
+	conv_horiz.use_kernel(Array<f32, 9>{
+		-1.0f, -2.0f, -1.0f,
+		0.0f, 0.0f, 0.0f,
+		+1.0f, +2.0f, +1.0f,
+	} / splat<f32, 9>(4.0f));
+
+	Convolution_Context<3> conv_vert = conv_horiz;
+	conv_vert.scratch = main_arena.make_sub(100);
+	conv_vert.use_kernel(Array<f32, 9>{
+		-1.0f, 0.0f, +1.0f,
+		-2.0f, 0.0f, +2.0f,
+		-1.0f, 0.0f, +1.0f,
+	} / splat<f32, 9>(4.0f));
+
+	auto begin = tick_now();
+	for(i32 x = 0; x < image.width; x++){
+		for(i32 y = 0; y < image.height; y++){
+			output.pixel_data[(y * output.width) + x] = clamp(0, (conv_horiz.get(x, y) + conv_vert.get(x, y)), 255);
+		}
+
+		crc32_ensure(image_check_value, image);
+	}
+	auto end = tick_now();
+	auto elapsed = tick_diff(end, begin);
+	printf("Elapsed: %dms\n", i32(elapsed.to_milli()));
+
+	dump_bitmap(output);
+}
+
+__attribute__((noinline)) static inline
 void entrypoint(){
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
 	task_arena = arena_from_buffer({&task_arena_memory[0], task_arena_size});
 
-	#if defined(FT_SCHED_PLATFORM_STM32F411CEU6)
-		for(int i = 5; i > 0; i --){
-			sleep_for(Duration::from_milli(1'000)); printf("%d\r\n", i); fflush(stdout);
-		}
-		print_info();
-	#else
-		swdg_init(Duration::from_milli(1'000));
-		DeadlineWatcher* watcher = make_deadline_watcher(&task_arena, 32);
-		ensure(watcher != nullptr, "Failed to create watcher");
-		auto watcher_task = make_basic_task(&task_arena, [watcher](TaskContext){
-			while(1){
-				auto ok = watcher->scan();
-				if(ok){
-					swdg_reset();
-				}
+	// #if defined(FT_SCHED_PLATFORM_STM32F411CEU6)
+	// 	for(int i = 5; i > 0; i --){
+	// 		sleep_for(Duration::from_milli(1'000)); printf("%d\r\n", i); fflush(stdout);
+	// 	}
+	// 	print_info();
+	// #else
+	// 	swdg_init(Duration::from_milli(1'000));
+	// 	DeadlineWatcher* watcher = make_deadline_watcher(&task_arena, 32);
+	// 	ensure(watcher != nullptr, "Failed to create watcher");
+	// 	auto watcher_task = make_basic_task(&task_arena, [watcher](TaskContext){
+	// 		while(1){
+	// 			auto ok = watcher->scan();
+	// 			if(ok){
+	// 				swdg_reset();
+	// 			}
 
-				sleep_for(Duration::from_milli(1));
-			}
+	// 			sleep_for(Duration::from_milli(1));
+	// 		}
 
-			return Unit{};
-		});
-	#endif
+	// 		return Unit{};
+	// 	});
+	// #endif
 
-	auto img_data = read_file_whole("lena.pgm", &main_arena).unwrap();
 
-	auto bitmap = load_p5(img_data).unwrap();
-	auto output = bitmap.copy(&main_arena).unwrap();
-
-	Convolution_Context<3> conv_horiz;
-	conv_horiz.input = bitmap;
-	conv_horiz.scratch = main_arena.make_sub(512);
-	conv_horiz.kernel = Array<f32, 9>{
-		-1.0f, -2.0f, -1.0f,
-		0.0f, 0.0f, 0.0f,
-		+1.0f, +2.0f, +1.0f,
-	} / splat<f32, 9>(4.0f);
-
-	Convolution_Context<3> conv_vert = conv_horiz;
-	conv_vert.scratch = main_arena.make_sub(512);
-	conv_vert.kernel = Array<f32, 9>{
-		-1.0f, 0.0f, +1.0f,
-		-2.0f, 0.0f, +2.0f,
-		-1.0f, 0.0f, +1.0f,
-	} / splat<f32, 9>(4.0f);
-
-	for(usize x = 0; x < bitmap.width; x++){
-		for(usize y = 0; y < bitmap.width; y++){
-			output.pixel_data[(y * output.width) + x] = clamp(0, (conv_horiz.get(x, y) + conv_vert.get(x, y)), 255);
-		}
-	}
-
-	dump_bitmap(output);
+	do_regular_conv();
 
 	fflush(stdout);
 	while(1){

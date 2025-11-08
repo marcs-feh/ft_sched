@@ -68,21 +68,6 @@ Duration tick_diff(TimeTick a, TimeTick b){
 
 void sleep_for(Duration d);
 
-//// Integrity checking
-template<typename T>
-concept CRC32_Checkable = requires(T const& obj) {
-	{ crc32(obj) } -> SameAs<u32>;
-};
-
-u32 crc32(Slice<u8> buf);
-
-void crc32_ensure(u32 expected, CRC32_Checkable auto const& obj){
-    volatile u32 cur = crc32(obj);
-    if(expected != cur){
-        panic("Failed CRC32 check");
-    }
-}
-
 //// Tasks
 enum TaskStatus : u8 {
 	TaskStatus_Undefined = 0,
@@ -193,6 +178,14 @@ struct TaskContext {
 		}
 	}
 
+	void panic(cstring msg, CALLER_LOCATION){
+		error_printf(caller_location.file_name(), caller_location.line(),
+			"[Task %2d] Panic: %s\r\n",
+			int(task->id), msg
+		);
+		task->cancel();
+	}
+
 	u32 id() const {
 		return task->id;
 	}
@@ -202,6 +195,50 @@ constexpr auto _task_nop = [](TaskContext) -> Unit { return{}; };
 
 constexpr inline auto _cancellation_nop = [](TaskContext){ /* Nothing */ };
 
+//// Integrity checking
+
+u32 crc32_advance(u32 current, Slice<u8> buf);
+
+template<typename T>
+struct CRC32 {
+	u32 get(T const& data) = delete;
+};
+
+template<>
+struct CRC32<Slice<u8>> {
+	u32 get(Slice<u8> data);
+};
+
+template<typename T>
+concept CRC32_Checkable = requires(T const& obj) {
+	{ CRC32<T>{}.get(obj) } -> SameAs<u32>;
+};
+
+template<CRC32_Checkable T>
+attribute_force_inline
+u32 crc32(T const& obj){
+	return CRC32<T>{}.get(obj);
+}
+
+template<typename T>
+	requires CRC32_Checkable<T>
+void crc32_ensure(u32 expected, T const& obj){
+    volatile u32 cur = CRC32<T>{}.get(obj);
+    if(expected != cur){
+        panic("Failed CRC32 check");
+    }
+}
+
+template<typename T>
+	requires CRC32_Checkable<T>
+void crc32_ensure(u32 expected, CRC32_Checkable auto const& obj, TaskContext* ctx){
+    volatile u32 cur = CRC32<T>{}.get(obj);
+    if(expected != cur){
+        ctx->panic("Failed CRC32 check");
+    }
+}
+
+//// Basic task
 template<typename Output, Callable<Output, TaskContext> TaskFunc, Callable<void, TaskContext> OnCancel>
 struct BasicTask {
 	RawTask _task;
