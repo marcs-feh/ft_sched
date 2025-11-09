@@ -105,6 +105,15 @@ wheels = [
 ]
 
 [[package]]
+name = "elf-size-analyze"
+version = "0.2.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ce/25/30e68840f1c2290fd0a127d539ce72061a7426da0d4f02774edec8a06d9f/elf-size-analyze-0.2.2.tar.gz", hash = "sha256:6ab4bcddc6aedcf2e4d6e102c262949e5b6cef3cbaf67ad2e15cf4da46b30ad2", size = 21396, upload-time = "2023-01-09T20:48:00.294Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c2/d8/f4a731171f4a7809f4a00210afbf9ef3d7a298f4082522b8ed89b3e17429/elf_size_analyze-0.2.2-py3-none-any.whl", hash = "sha256:0bb4e43e4314563d3d564ffc0d03e179681808d804f2b6ae82b28d22f0d94a66", size = 24665, upload-time = "2023-01-09T20:47:59.082Z" },
+]
+
+[[package]]
 name = "hidapi"
 version = "0.14.0.post4"
 source = { registry = "https://pypi.org/simple" }
@@ -145,6 +154,7 @@ name = "injection"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "elf-size-analyze" },
     { name = "pyelftools" },
     { name = "pyocd" },
     { name = "pyrefly" },
@@ -152,6 +162,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "elf-size-analyze", specifier = ">=0.2.2" },
     { name = "pyelftools", specifier = ">=0.32" },
     { name = "pyocd", specifier = ">=0.40.0" },
     { name = "pyrefly", specifier = ">=0.40.0" },

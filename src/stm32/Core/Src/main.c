@@ -252,10 +252,8 @@ void StartDefaultTask(void *argument)
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 5 */
   /* Infinite loop */
-  while(1){
-	  printf("Enter Default task loop\r\n");
-	  ft_sched_entrypoint();
-  }
+  ft_sched_entrypoint();
+  while(1){}
   /* USER CODE END 5 */
 }
 

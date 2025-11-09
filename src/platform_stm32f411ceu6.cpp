@@ -100,7 +100,7 @@ bool RawTask::_platform_init(Arena* arena, usize stack_size, RawTaskFunc, void*)
 }
 
 bool RawTask::_platform_join(){
-	constexpr auto join_interval = Duration::from_milli(20);
+	constexpr auto join_interval = Duration::from_milli(5);
 
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 	TaskHandle_t handle = specific->handle.load();
@@ -110,7 +110,7 @@ bool RawTask::_platform_join(){
 		status < TaskStatus_Done;
 		status = this->_status.load(memory_order_relaxed)
 	){
-		printf("Joining from %d (status=%d)\r\n", int(id), int(status)); fflush(stdout);
+		// printf("Joining from %d (status=%d)\r\n", int(id), int(status)); fflush(stdout);
 		sleep_for(join_interval);
 	}
 
@@ -123,7 +123,16 @@ bool RawTask::_platform_join(){
 }
 
 bool RawTask::_platform_cancel(){
-	unimplemented();
+	_status.store(TaskStatus_Fault);
+	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
+	TaskHandle_t handle = specific->handle.load();
+
+	if(handle){
+		vTaskDelete(handle);
+	}
+	specific->handle.store(NULL);
+
+	return true;
 }
 
 void sleep_for(Duration d){

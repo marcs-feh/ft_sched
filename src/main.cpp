@@ -179,11 +179,21 @@ IO_Writer get_file_writer(cstring path){
 	return s.as_writer();
 }
 
+#if defined(FT_SCHED_PLATFORM_STM32F411CEU6)
+void dump_bitmap(Bitmap const& bmap){
+	auto writer = get_stdout_stream().as_writer();
+	writer.write(String("============ BEGIN BITMAP ==========\r\n").raw_bytes());
+	save_p5(bmap, writer);
+	writer.write(String("============ END BITMAP ============\r\n").raw_bytes());
+	writer.close();
+}
+#else
 void dump_bitmap(Bitmap const& bmap){
 	auto writer = get_file_writer("out.pgm");
 	save_p5(bmap, writer);
 	writer.close();
 }
+#endif
 
 #include "lena.pgm.cpp"
 
@@ -213,7 +223,7 @@ void do_regular_conv(){
 	auto begin = tick_now();
 	for(i32 y = 0; y < image.height; y++){
 		for(i32 x = 0; x < image.width; x++){
-			output.pixel_data[(y * output.width) + x] = clamp(0, (conv_horiz.get(x, y) + conv_vert.get(x, y)), 255);
+			output.pixel_data[(y * output.width) + x] = clamp<i32>(0, (conv_horiz.get(x, y) + conv_vert.get(x, y)), 255);
 		}
 		crc32_ensure(image_check_value, image);
 	}
@@ -305,17 +315,40 @@ auto make_tmr_task(Arena* arena, DeadlineWatcher* supervisor, Duration sub_task_
 	return tmr;
 }
 
-__attribute__((noinline)) static inline
+static inline
 void entrypoint(){
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
 	task_arena = arena_from_buffer({&task_arena_memory[0], task_arena_size});
+
+	#if defined(FT_SCHED_PLATFORM_STM32F411CEU6)
+		for(int i = 5; i > 0; i --){
+			sleep_for(Duration::from_milli(1'000)); printf("%d\r\n", i); fflush(stdout);
+		}
+		print_info();
+	#else
+		swdg_init(Duration::from_milli(1'000));
+		DeadlineWatcher* swdg_watcher = make_deadline_watcher(&task_arena, 32);
+		ensure(swdg_watcher != nullptr, "Failed to create swdg_watcher");
+		auto watcher_task = make_basic_task(&task_arena, [swdg_watcher](TaskContext){
+			while(1){
+				auto ok = swdg_watcher->scan();
+				if(ok){
+					swdg_reset();
+				}
+
+				sleep_for(Duration::from_milli(1));
+			}
+
+			return Unit{};
+		});
+	#endif
 
 	DeadlineWatcher* watcher = make_deadline_watcher(&task_arena, 32);
 	ensure(watcher, "Failed to create watcher");
 
 	make_tmr_task(&task_arena, watcher, Duration::from_milli(200), [](TaskContext ctx) -> Unit {
 		sleep_for(Duration::from_milli(100 * ctx.id()));
-		printf("Hello %d\r\n", ctx.id());
+		printf("Hello %d\r\n", int(ctx.id()));
 		return {};
 	});
 
@@ -324,41 +357,15 @@ void entrypoint(){
 		sleep_for(Duration::from_milli(1));
 	}
 
-	// #if defined(FT_SCHED_PLATFORM_STM32F411CEU6)
-	// 	for(int i = 5; i > 0; i --){
-	// 		sleep_for(Duration::from_milli(1'000)); printf("%d\r\n", i); fflush(stdout);
-	// 	}
-	// 	print_info();
-	// #else
-	// 	swdg_init(Duration::from_milli(1'000));
-	// 	DeadlineWatcher* watcher = make_deadline_watcher(&task_arena, 32);
-	// 	ensure(watcher != nullptr, "Failed to create watcher");
-	// 	auto watcher_task = make_basic_task(&task_arena, [watcher](TaskContext){
-	// 		while(1){
-	// 			auto ok = watcher->scan();
-	// 			if(ok){
-	// 				swdg_reset();
-	// 			}
-
-	// 			sleep_for(Duration::from_milli(1));
-	// 		}
-
-	// 		return Unit{};
-	// 	});
-	// #endif
-
-
-	// do_regular_conv();
-
 	fflush(stdout);
-	while(1){
-		sleep_for({0});
-		break;
-	}
+	printf("------------------\r\n");
+
+	while(1){}
 }
 
 //// ---------------------------------------------
 #if defined(FT_SCHED_NO_MAIN)
+__attribute__((noinline)) 
 extern "C" void ft_sched_entrypoint()
 #else
 int main()

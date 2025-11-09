@@ -258,13 +258,13 @@ struct BasicTask {
 
 	static void _basic_task_wrapper(RawTask* t){
 		auto self = (BasicTask<Output, TaskFunc, OnCancel>*)t->args;
-		auto context = TaskContext { &self->_task, nullptr };
+		auto context = TaskContext { &self->_task };
 		self->_result = Output{ self->_func(context) };
 	}
 
 	static void _basic_task_cancel_wrapper(RawTask* t){
 		auto self = (BasicTask<Output, TaskFunc, OnCancel>*)t->args;
-		auto context = TaskContext { &self->_task, nullptr };
+		auto context = TaskContext { &self->_task };
 		self->_on_cancel(context);
 	}
 
