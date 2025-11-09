@@ -89,6 +89,8 @@ function execute_build(flash_serial, verbose)
 			'-nostdlib',
 
 			'-I./stm32/Core/Inc',
+
+			'-I./stm32/Drivers/CMSIS/Include',
 			'-I./stm32/Middlewares/Third_Party/FreeRTOS/Source/include',
 			'-I./stm32/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2',
 			'-I./stm32/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F',

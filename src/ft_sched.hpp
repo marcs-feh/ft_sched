@@ -359,6 +359,11 @@ struct BasicTask {
 		return _task.id;
 	}
 
+	[[nodiscard]]
+	bool attach_supervisor(DeadlineWatcher* watcher, Duration limit){
+		return _task.attach_supervisor(watcher, limit);
+	}
+
 	void cancel(CALLER_LOCATION){
 		_task.cancel(caller_location);
 

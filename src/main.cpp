@@ -353,13 +353,32 @@ void entrypoint(){
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
 	task_arena = arena_from_buffer({&task_arena_memory[0], task_arena_size});
 
+	auto image = load_p5(image_pgm_data).unwrap();
+	bool running = true;
+
+	auto convolve_horizontal_input = make_spsc_queue<i32>(&main_arena, 8);
+
+	auto convolve_horizontal = [&running, convolve_horizontal_input, image](TaskContext ctx){
+		i32 row_idx = 0;
+		while(running){
+			if(!convolve_horizontal_input->pop_into(&row_idx)){
+				continue;
+			}
+
+			printf("RECV: %d\r\n", int(row_idx)); fflush(stdout);
+			sleep_for(Duration::from_milli(10));
+		}
+
+		return row_idx;
+	};
+
 	#if defined(FT_SCHED_PLATFORM_STM32F411CEU6)
-		for(int i = 5; i > 0; i --){
+		for(int i = 4; i > 0; i --){
 			sleep_for(Duration::from_milli(1'000)); printf("%d\r\n", i); fflush(stdout);
 		}
 		print_info();
-	#else
-		swdg_init(Duration::from_milli(30'000));
+	#endif
+		swdg_init(Duration::from_milli(10'000));
 
 		DeadlineWatcher* swdg_watcher = make_deadline_watcher(&task_arena, 32);
 		mem_copy(&swdg_watcher->name, "SWDG", sizeof(swdg_watcher->name) - 1);
@@ -378,29 +397,44 @@ void entrypoint(){
 
 			return Unit{};
 		});
-	#endif
+	// #endif
 
-	DeadlineWatcher* watcher = make_deadline_watcher(&task_arena, 32);
-	ensure(watcher, "Failed to create watcher");
+	auto horiz_task = make_basic_task(&task_arena, 2000, 0, convolve_horizontal);
+	horiz_task->attach_supervisor(swdg_watcher, Duration::from_milli(1'000));
 
-	auto tmr = make_tmr_task(&task_arena, 2048, 0, Duration::from_milli(1000), [](TaskContext ctx) -> Unit {
-		printf("Hello %d\r\n", int(ctx.id())); fflush(stdout);
-		sleep_for(Duration::from_milli(ctx.id() * 50));
-		printf("Bye %d\r\n", int(ctx.id())); fflush(stdout);
-		return {};
-	});
+	for(i32 i = 0; i < image.height; i += 1){
+		convolve_horizontal_input->push(i);
+	}
 
-	ensure(tmr, "Failed to create TMR task");
+	horiz_task->join();
 
-	// bool attached = tmr->attach_supervisor(swdg_watcher, Duration::from_milli(4'000));
-	// ensure(attached, "Could not attach swdg supervisor");
-	tmr->join();
+	// DeadlineWatcher* watcher = make_deadline_watcher(&task_arena, 32);
+	// ensure(watcher, "Failed to create watcher");
+	// auto tmr = make_tmr_task(&task_arena, 2048, 0, Duration::from_milli(1000), [](TaskContext ctx) -> Unit {
+	// 	printf("Hello %d\r\n", int(ctx.id())); fflush(stdout);
+	// 	sleep_for(Duration::from_milli(ctx.id() * 50));
+	// 	printf("Bye %d\r\n", int(ctx.id())); fflush(stdout);
+	// 	return {};
+	// });
+
+	// ensure(tmr, "Failed to create TMR task");
+
+	// // bool attached = tmr->attach_supervisor(swdg_watcher, Duration::from_milli(4'000));
+	// // ensure(attached, "Could not attach swdg supervisor");
+	// tmr->join();
+
+	// for(f32 x = 1.4; x < 100; x *= 2.00213){
+	// 	Array<u8, 40> buf;
+	// 	auto s = buffer_printf(buf.slice(), "%f", x);
+	// 	printf("x = %.*s\r\n", int(s.len), cstring(s.data));
+	// }
 
 	fflush(stdout);
 	printf("------------------\r\n");
 
 	#if defined(FT_SCHED_PLATFORM_STM32F411CEU6)
-	while(1){}
+	while(1){
+	}
 	#endif
 }
 

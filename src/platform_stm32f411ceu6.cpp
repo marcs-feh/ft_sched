@@ -18,8 +18,6 @@ void error_write(cstring msg){
 
 [[noreturn]]
 void trap(){
-	abort();
-
 	for(;;);
 }
 
@@ -67,22 +65,24 @@ bool RawTask::_platform_init(Arena* arena, usize stack_size, RawTaskFunc, void*)
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 
 	auto name = arena_printf(arena, "T:%d", int(id));
-	auto tcb = make<StaticTask_t>(arena);
-	auto stack = (StackType_t*)arena->alloc(stack_size, portBYTE_ALIGNMENT * 2);
+	StaticTask_t* tcb = make<StaticTask_t>(arena);
+	StackType_t* stack = (StackType_t*)arena->alloc(stack_size, portBYTE_ALIGNMENT);
+
+	printf("TASK SIZE: %d\r\n", int(sizeof(StaticTask_t)));
 
 	if(!name.data){
 		printf("Failed to allocate name\r\n");
 		return false;
 	}
 	if(!tcb){
-		printf("Failed to allocate TCB\r\n");
+		printf("Failed to allocate TCB: (offset=%d, capacity=%d, size=%d)\r\n", int(arena->offset), int(arena->capacity), int(sizeof(tcb)));
 		return false;
 	}
+
 	if(!stack){
 		printf("Failed to allocate stack: (offset=%d, capacity=%d, size=%d)\r\n", int(arena->offset), int(arena->capacity), int(stack_size));
 		return false;
 	}
-
 	TaskHandle_t handle = xTaskCreateStatic(
 		_freertos_task_wrapper, /* Task body */
 		name.data, /* Name */
@@ -109,7 +109,7 @@ bool RawTask::_platform_join(){
 		status < TaskStatus_Done;
 		status = this->_status.load(memory_order_relaxed)
 	){
-		// printf("Joining from %d (status=%d)\r\n", int(id), int(status)); fflush(stdout);
+		printf("Joining from %d (status=%d)\r\n", int(id), int(status)); fflush(stdout);
 		sleep_for(join_interval);
 	}
 
