@@ -252,7 +252,7 @@ struct TripleTask {
 			// }
 
 			auto scan = subtasks_watcher->scan();
-			printf("--tmrjoin-- count=%d scan=%d\n", subtasks_watcher->count(), int(scan));fflush(stdout);
+			// printf("--tmrjoin-- count=%d scan=%d\n", subtasks_watcher->count(), int(scan));fflush(stdout);
 
 			if(!scan){
 				break;
@@ -298,7 +298,8 @@ struct TripleTask {
 		if(watcher == subtasks_watcher){
 			panic("Recursive watcher is not allowed");
 		}
-		return watcher->add(this, _tmr_task_slot_cancellation, limit);
+		supervisor = watcher;
+		return supervisor->add(this, _tmr_task_slot_cancellation, limit);
 	}
 
 	TripleTask(TaskFunc f)
@@ -362,7 +363,7 @@ void entrypoint(){
 		}
 		print_info();
 	#else
-		swdg_init(Duration::from_milli(200));
+		swdg_init(Duration::from_milli(30'000));
 
 		DeadlineWatcher* swdg_watcher = make_deadline_watcher(&task_arena, 32);
 		mem_copy(&swdg_watcher->name, "SWDG", sizeof(swdg_watcher->name) - 1);
@@ -373,7 +374,6 @@ void entrypoint(){
 				// printf("[swdg] Scan %d\r\n", int(swdg_watcher->count())); fflush(stdout);
 				auto ok = swdg_watcher->scan() && swdg_watcher->count();
 				if(ok){
-					printf("RESET\r\n"); fflush(stdout);
 					swdg_reset();
 				}
 
@@ -388,22 +388,21 @@ void entrypoint(){
 	ensure(watcher, "Failed to create watcher");
 
 	auto tmr = make_tmr_task(&task_arena, 1024, 0, Duration::from_milli(1000), [](TaskContext ctx) -> Unit {
-		printf("Hello %d\r\n", int(ctx.id())); fflush(stdout);
+		printf("Hello %d\n", int(ctx.id())); fflush(stdout);
 		if(ctx.id() % 3 == 0){
 			sleep_for(Duration::from_milli(2000));
 		}
-		printf("Bye %d\r\n", int(ctx.id())); fflush(stdout);
+		printf("Bye %d\n", int(ctx.id())); fflush(stdout);
 		return {};
 	});
 
 	ensure(tmr, "Failed to create TMR task");
 
-	tmr->attach_supervisor(swdg_watcher, Duration::from_milli(350));
+	tmr->attach_supervisor(swdg_watcher, Duration::from_milli(4'000));
 	tmr->join();
 
 	fflush(stdout);
 	printf("------------------\r\n");
-
 
 	#if defined(FT_SCHED_PLATFORM_STM32F411CEU6)
 	while(1){}
