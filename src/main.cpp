@@ -240,13 +240,14 @@ struct TripleTask {
 			{}
 	};
 
-	DeadlineWatcher* watcher;
+	DeadlineWatcher* supervisor;
 	SubTask subtasks[3];
-	Atomic<u32> started{0};
+	Atomic<u32> running{0};
 
 	void join(CALLER_LOCATION){
-		while(watcher->count()){
-			watcher->scan();
+		while(supervisor->count()){
+			supervisor->scan();
+			sleep_for(Duration::from_milli(1));
 		}
 	}
 
@@ -256,25 +257,27 @@ struct TripleTask {
 		ensure(subtask->_task.supervisor, "A supervisor is required");
 		context.reset_deadline();
 
-		subtask->parent->started.fetch_add(1, memory_order_relaxed);
+		subtask->parent->running.fetch_add(1, memory_order_relaxed);
 
-		while(subtask->parent->started.load(memory_order_relaxed) != 3){
-			sleep_for(Duration::from_milli(1));
+		// Wait until siblings are initialized
+		while(subtask->parent->running.load(memory_order_relaxed) != 3){
+			task_yield();
 		}
 
 		context.reset_deadline();
 		subtask->_result = Output{ subtask->_func(context) };
+		subtask->parent->running.fetch_sub(1, memory_order_relaxed);
 	}
 
 	TripleTask(TaskFunc f)
-		: watcher{}
+		: supervisor{}
 		, subtasks{
 			SubTask(f, _cancellation_nop, this),
 			SubTask(f, _cancellation_nop, this),
 			SubTask(f, _cancellation_nop, this)
 		}
 			
-		, started{0}
+		, running{0}
 	{}
 
 };
@@ -284,22 +287,21 @@ auto make_tmr_task(
 	Arena* arena,
 	usize subtask_arena_size,
 	usize subtask_stack_size,
-	DeadlineWatcher* supervisor,
-	Duration sub_task_deadline,
+	Duration subtask_deadline,
 	F&& func
 ){
 	auto restore = arena->offset;
 	using TaskType = TripleTask<decltype(func(TaskContext{})), F, decltype(_cancellation_nop)>;
 
 	auto tmr = make<TaskType>(arena, func);
-	auto watcher = make_deadline_watcher(arena, 6);
-	if(!tmr || !watcher){
+	auto supervisor = make_deadline_watcher(arena, 6);
+	if(!tmr || !supervisor){
 		arena->offset = restore;
 		return (TaskType*)nullptr;
 	}
 
-	tmr->started.store(0);
-	tmr->watcher = watcher;
+	tmr->running.store(0);
+	tmr->supervisor = supervisor;
 
 	for(int i = 0; i < 3; i++){
 		auto subtask = &tmr->subtasks[i];
@@ -310,7 +312,7 @@ auto make_tmr_task(
 		}
 
 		if(supervisor){
-			supervisor->watch(subtask->raw_task(), sub_task_deadline);
+			supervisor->watch(subtask->raw_task(), subtask_deadline);
 		}
 	}
 
@@ -328,7 +330,7 @@ void entrypoint(){
 		}
 		print_info();
 	#else
-		swdg_init(Duration::from_milli(1'000));
+		swdg_init(Duration::from_milli(500));
 		DeadlineWatcher* swdg_watcher = make_deadline_watcher(&task_arena, 32);
 		ensure(swdg_watcher != nullptr, "Failed to create swdg_watcher");
 		auto watcher_task = make_basic_task(&task_arena, 512, [swdg_watcher](TaskContext){
@@ -348,20 +350,23 @@ void entrypoint(){
 	DeadlineWatcher* watcher = make_deadline_watcher(&task_arena, 32);
 	ensure(watcher, "Failed to create watcher");
 
-	auto tmr = make_tmr_task(&task_arena, 1024, 0, watcher, Duration::from_milli(900'000), [](TaskContext ctx) -> Unit {
+	auto tmr = make_tmr_task(&task_arena, 1024, 0, Duration::from_milli(1000), [](TaskContext ctx) -> Unit {
 		sleep_for(Duration::from_milli(100 * ctx.id()));
 		if(ctx.id() == 3){
 			ctx.panic("Uh oh!");
+		}
+		if(ctx.id() == 4){
+			sleep_for(Duration::from_milli(2'000));
 		}
 
 		printf("Hello %d\r\n", int(ctx.id())); fflush(stdout);
 		return {};
 	});
+	// swdg_watcher->watch(tmr);
 
-	while(watcher->count()){
-		watcher->scan();
-		sleep_for(Duration::from_milli(1));
-	}
+	ensure(tmr, "Failed to create TMR task");
+
+	tmr->join();
 
 	fflush(stdout);
 	printf("------------------\r\n");

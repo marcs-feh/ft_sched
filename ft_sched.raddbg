@@ -1,6 +1,9 @@
 // raddbg 0.9.23 project file
 
+recent_file: path: "D:/a/_work/1/s/src/vctools/crt/vcstartup/src/startup/exe_common.inl"
 recent_file: path: "src/main.cpp"
+recent_file: path: "src/platform_windows.cpp"
+recent_file: path: "d:/os/obj/amd64fre/minkernel/crts/ucrt/src/appcrt/stdio/mt/objfre/amd64/minkernel/crts/ucrt/src/appcrt/stdio/puts.cpp"
 recent_file: path: "src/ft_sched.hpp"
 recent_file: path: "src/base.cpp"
 recent_file: path: "src/raw_task.cpp"
@@ -9,8 +12,6 @@ recent_file: path: "../../../Programs/MSVC/VC/Tools/MSVC/14.44.35207/include/ato
 recent_file: path: "d:/os/obj/amd64fre/minkernel/crts/ucrt/src/appcrt/startup/mt/objfre/amd64/minkernel/crts/ucrt/src/appcrt/startup/abort.cpp"
 recent_file: path: "src/image.cpp"
 recent_file: path: "src/base.hpp"
-recent_file: path: "D:/a/_work/1/s/src/vctools/crt/vcstartup/src/startup/exe_common.inl"
-recent_file: path: "src/platform_windows.cpp"
 recent_file: path: "src/task.cpp"
 recent_file: path: "src/task.hpp"
 recent_file: path: "src/ft_sched.exe"
@@ -27,6 +28,6 @@ breakpoint:
 }
 breakpoint:
 {
-  source_location: "src/main.cpp:342:1"
+  address_location: entrypoint
   hit_count: 1
 }

@@ -101,6 +101,35 @@ bool DeadlineWatcher::scan(){
 	return ok;
 }
 
+RawTask* DeadlineWatcher::scan_until_violation(){
+	auto guard = _lock.guard();
+
+	auto now = tick_now();
+	bool ok = true;
+
+	for(auto& slot : slots){
+		if(!slot.task){
+			continue;
+	 	}
+
+	 	auto status = slot.task->status();
+		if(status >= TaskStatus_Done){
+			_remove_no_lock(&slot);
+			continue;
+		}
+
+		auto elapsed = tick_diff(now, slot.last_tick);
+
+		if(elapsed > slot.limit){
+			printf("[Error] Deadline Violation on task (%d)\r\n", int(slot.task->id));
+			// slot.task->cancel();
+			// _remove_no_lock(&slot);
+			return slot.task;
+		}
+	}
+
+	return nullptr;
+}
 
 void init_deadline_watcher(DeadlineWatcher* w, Slice<DeadlineSlot> slots){
 	mem_zero(w, sizeof(DeadlineWatcher));

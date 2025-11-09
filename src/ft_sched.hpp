@@ -83,6 +83,7 @@ struct RawTask;
 // Yield the currently executing task
 void task_yield();
 
+//// Deadlines
 struct DeadlineSlot {
 	TimeTick last_tick;
 	Duration limit;
@@ -93,7 +94,19 @@ struct DeadlineSlot {
 	}
 };
 
-//// Deadlines
+using SlotCancellationCallback = void (*) (void* data);
+
+struct DeadlineSlot2 {
+	TimeTick last_tick;
+	Duration limit;
+	void* key;
+	SlotCancellationCallback cancel;
+
+	void reset(){
+		last_tick = tick_now();
+	}
+};
+
 struct DeadlineWatcher {
 	Slice<DeadlineSlot> slots;
 	Spinlock _lock{};
@@ -121,6 +134,9 @@ struct DeadlineWatcher {
 
 	// Scan for deadline violations and remove Done tasks
 	bool scan();
+
+	// Scan for deadline violations stop at the first violation
+	RawTask* scan_until_violation();
 
 	DeadlineWatcher()
 		: slots{}
