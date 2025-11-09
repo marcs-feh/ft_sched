@@ -64,6 +64,12 @@ T clamp(T lo, T x, T hi){
 	return min(max(lo, x), hi);
 }
 
+template<typename A, typename B = A>
+struct Pair {
+	A a;
+	B b;
+};
+
 template<class T>
 using Atomic = std::atomic<T>;
 
@@ -227,108 +233,6 @@ void unimplemented(CALLER_LOCATION){
 	panic_ex("Unimplemented", caller_location.file_name(), caller_location.line());
 }
 
-// #define ensure(Pred, Msg) ensure_ex((Pred), (Msg), __FILE__, __LINE__)
-// #define panic(Msg) panic_ex((Msg), __FILE__, __LINE__)
-// #define unimplemented() panic_ex("Unimplemented", __FILE__, __LINE__)
-
-//// Option
-template<typename T>
-struct Option {
-	union {
-		T _value;
-		Nat _nat;
-	};
-	bool _has_value = false;
-
-	attribute_force_inline constexpr auto ok() const { return _has_value; }
-
-	[[nodiscard]] constexpr
-	T unwrap(CALLER_LOCATION){
-		if(!_has_value){
-			panic("unwrap() on empty option", caller_location);
-		}
-		auto v = ::move(_value);
-		drop();
-		return v;
-	}
-
-	[[nodiscard]] constexpr
-	T unwrap_unchecked(){
-		auto v = ::move(_value);
-		drop();
-		return v;
-	}
-
-	template<typename U>
-	T unwrap_or(U&& alt){
-		if(!_has_value){
-			return forward<U>(alt);
-		}
-		else {
-			return unwrap();
-		}
-	}
-
-	attribute_force_inline constexpr
-	Option<T>* drop(){
-		if(_has_value){
-			_value.~T();
-		}
-		_has_value = false;
-		return this;
-	}
-
-	constexpr bool operator==(Option<T> const& opt) const {
-		auto same_has_value = opt._has_value == _has_value;
-		if(_has_value && same_has_value){
-			return opt._value == _value;
-		}
-		return same_has_value;
-	}
-
-	constexpr operator bool() const {
-		return _has_value;
-	}
-
-	constexpr
-	Option() : _nat{}, _has_value{false} {}
-
-	constexpr
-	Option(T&& v)
-		: _value{::move(v)}
-		, _has_value{true} {}
-
-	constexpr
-	Option(T const& v)
-		: _value{v}
-		, _has_value{true} {}
-
-	constexpr
-	Option(Option<T>&& other)
-		: _nat{}
-		, _has_value{exchange(other._has_value, false)}
-	{
-		if(_has_value){
-			new (&_value, Nat{}) T{::move(other._value)};
-			other.drop();
-		}
-	}
-
-	constexpr
-	Option<T>& operator=(T&& v){
-		return *new(drop(), Nat{}) Option{::move(v)};
-	}
-
-	constexpr
-	Option<T>& operator=(Option<T>&& o){
-		return *new(drop(), Nat{}) Option{::move(o)};
-	}
-
-	~Option(){
-		drop();
-	}
-};
-
 //// C++ Iterator insanity
 namespace detail {
 template<typename T>
@@ -400,17 +304,6 @@ struct Slice {
 		return data[idx];
 	}
 
-	template<typename Fn>
-	Option<usize> linear_search(Fn&& predicate){
-		for(usize i = 0; i < len; i += 1){
-			if(predicate(data[i])){
-				auto pos = Option ( i );
-				return pos;
-			}
-		}
-		return {};
-	}
-
 	// Implicit conversion, these are very rare but this allows the same idiom to check for pointer null for slices as well
 	operator bool() const {
 		return len != 0 || data == nullptr;
@@ -424,15 +317,6 @@ struct Slice {
 		return detail::ContigousMemoryCppIterator<T>{ &data[len] };
 	}
 };
-
-template<typename T>
-Slice<T> copy(Slice<T> dst, Slice<T> src){
-	auto n = min(dst.len, src.len);
-	for(usize i = 0; i < n; i += 1){
-		dst.data[i] = src.data[i];
-	}
-	return dst.take(n);
-}
 
 //// Array
 template<typename T, unsigned int N>
@@ -523,6 +407,118 @@ Array<T, N> splat(T value){
 	Array<T, N> res;
 	for(unsigned int i = 0; i < N; ++i){ res._v[i] = value; }
 	return res;
+}
+
+
+//// Option
+template<typename T>
+struct Option {
+	union {
+		T _value;
+		Nat _nat;
+	};
+	bool _has_value = false;
+
+	attribute_force_inline constexpr auto ok() const { return _has_value; }
+
+	[[nodiscard]] constexpr
+	T unwrap(cstring msg = "", CALLER_LOCATION){
+		if(!_has_value){
+			Array<u8, 72> buf;
+			auto s = buffer_printf(buf.slice(), "(%s:%d) bad unwrap(): %s", caller_location.file_name(), caller_location.line(), msg);
+			panic(s.data);
+		}
+		auto v = ::move(_value);
+		drop();
+		return v;
+	}
+
+	[[nodiscard]] constexpr
+	T unwrap_unchecked(){
+		auto v = ::move(_value);
+		drop();
+		return v;
+	}
+
+	template<typename U>
+	T unwrap_or(U&& alt){
+		if(!_has_value){
+			return forward<U>(alt);
+		}
+		else {
+			return unwrap();
+		}
+	}
+
+	attribute_force_inline constexpr
+	Option<T>* drop(){
+		if(_has_value){
+			_value.~T();
+		}
+		_has_value = false;
+		return this;
+	}
+
+	constexpr bool operator==(Option<T> const& opt) const {
+		auto same_has_value = opt._has_value == _has_value;
+		if(_has_value && same_has_value){
+			return opt._value == _value;
+		}
+		return same_has_value;
+	}
+
+	constexpr operator bool() const {
+		return _has_value;
+	}
+
+	constexpr
+	Option() : _nat{}, _has_value{false} {}
+
+	constexpr
+	Option(T&& v)
+		: _value{::move(v)}
+		, _has_value{true} {}
+
+	constexpr
+	Option(T const& v)
+		: _value{v}
+		, _has_value{true} {}
+
+	constexpr
+	Option(Option<T>&& other)
+		: _nat{}
+		, _has_value{exchange(other._has_value, false)}
+	{
+		if(_has_value){
+			new (&_value, Nat{}) T{::move(other._value)};
+			other.drop();
+		}
+	}
+
+	constexpr
+	Option<T>& operator=(T&& v){
+		return *new(drop(), Nat{}) Option{::move(v)};
+	}
+
+	constexpr
+	Option<T>& operator=(Option<T>&& o){
+		return *new(drop(), Nat{}) Option{::move(o)};
+	}
+
+	~Option(){
+		drop();
+	}
+};
+
+
+
+template<typename T>
+Slice<T> copy(Slice<T> dst, Slice<T> src){
+	auto n = min(dst.len, src.len);
+	for(usize i = 0; i < n; i += 1){
+		dst.data[i] = src.data[i];
+	}
+	return dst.take(n);
 }
 
 

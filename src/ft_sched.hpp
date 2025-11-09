@@ -417,3 +417,122 @@ void swdg_stop();
 
 void swdg_resume();
 
+
+//// TMR
+template<typename Output, Callable<Output, TaskContext> TaskFunc, Callable<void, TaskContext> OnCancel>
+struct TripleTask {
+	struct SubTask : public BasicTask<Output, TaskFunc, OnCancel>{
+		TripleTask* parent;
+
+		SubTask(TaskFunc f, OnCancel c, TripleTask* p)
+			: BasicTask<Output, TaskFunc, OnCancel>{f, c}
+			, parent{p}
+			{}
+	};
+
+	DeadlineWatcher* supervisor;
+	DeadlineWatcher* subtasks_watcher;
+	SubTask subtasks[3];
+	Atomic<u32> running{0};
+
+	void join(){
+		while(subtasks_watcher->count()){
+			auto scan = subtasks_watcher->scan();
+
+			if(!scan){
+				break;
+			}
+
+			sleep_for(Duration::from_milli(40));
+		}
+
+	}
+
+	static void _subtask_wrapper(RawTask* t){
+		auto subtask = (SubTask*)t->args;
+		auto context = TaskContext { &subtask->_task };
+		ensure(subtask->_task.supervisor == subtask->parent->subtasks_watcher && subtask->parent->subtasks_watcher, "Task not being monitored");
+
+		subtask->parent->running.fetch_add(1, memory_order_relaxed);
+
+		// Wait until siblings are initialized
+		// while(subtask->parent->running.load(memory_order_relaxed) != 3){
+		// 	task_yield();
+		// }
+		context.reset_deadline();
+
+		subtask->_result = Output{ subtask->_func(context) };
+		subtask->parent->running.fetch_sub(1, memory_order_relaxed);
+		// subtask->parent->subtasks_watcher->remove_key(subtask);
+	}
+
+
+	static
+	void _tmr_task_slot_cancellation(void* data){
+		auto tmr = (TripleTask*)data;
+		tmr->subtasks_watcher->clear();
+		tmr->running.store(0);
+
+		for(int i = 0; i < 3; i += 1){
+			tmr->subtasks[i].cancel();
+		}
+
+	}
+
+	[[nodiscard]]
+	bool attach_supervisor(DeadlineWatcher* watcher, Duration limit){
+		if(watcher == subtasks_watcher){
+			panic("Recursive watcher is not allowed");
+		}
+		supervisor = watcher;
+		return supervisor->add(this, _tmr_task_slot_cancellation, limit);
+	}
+
+	TripleTask(TaskFunc f)
+		: supervisor{nullptr}
+		, subtasks_watcher{nullptr}
+		, subtasks{
+			SubTask(f, _cancellation_nop, this),
+			SubTask(f, _cancellation_nop, this),
+			SubTask(f, _cancellation_nop, this)
+		}
+			
+		, running{0}
+	{}
+};
+
+template<typename F> [[nodiscard]]
+auto make_tmr_task(
+	Arena* arena,
+	usize subtask_arena_size,
+	usize subtask_stack_size,
+	Duration subtask_deadline,
+	F&& func
+){
+	auto restore = arena->offset;
+	using TaskType = TripleTask<decltype(func(TaskContext{})), F, decltype(_cancellation_nop)>;
+
+	auto tmr = make<TaskType>(arena, func);
+	auto subtasks_watcher = make_deadline_watcher(arena, 6);
+	if(!tmr || !subtasks_watcher){
+		arena->offset = restore;
+		return (TaskType*)nullptr;
+	}
+
+	tmr->running.store(0);
+	tmr->subtasks_watcher = subtasks_watcher;
+
+	for(int i = 0; i < 3; i++){
+		auto subtask = &tmr->subtasks[i];
+
+		auto watch_ok = subtask->raw_task()->attach_supervisor(tmr->subtasks_watcher, subtask_deadline);
+		ensure(watch_ok, "Failed to watch task");
+
+		if(!init_raw_task(subtask->raw_task(), arena, subtask_arena_size, subtask_stack_size, tmr->_subtask_wrapper, subtask)){
+			arena->offset = restore;
+			return (TaskType*)nullptr;
+		}
+	}
+
+	return tmr;
+}

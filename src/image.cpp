@@ -1,5 +1,17 @@
 #include "base.hpp"
 
+constexpr bool enable_crc_checks = false;
+
+template<typename T, typename F>
+Option<usize> linear_search(Slice<T> s, F&& predicate){
+	for(usize i = 0; i < s.len; i += 1){
+		if(predicate(s[i])){
+			return i;
+		}
+	}
+	return {};
+}
+
 struct Rect {
 	i32 x, y;
 	i32 w, h;
@@ -113,12 +125,13 @@ struct CRC32<Bitmap>{
 Option<Bitmap> Bitmap::copy(Arena* a){
 	auto data = make_slice<u8>(a, this->width * this->height);
 	if(!data){
-		return {};
+		return Option<Bitmap>{};
 	}
 
 	Bitmap bmp;
 	mem_copy(&bmp, this, sizeof(*this));
-	bmp.pixel_data = ::copy(data, this->pixel_data);
+	::copy(data, this->pixel_data);
+	bmp.pixel_data = data;
 
 	return bmp;
 }
@@ -234,7 +247,7 @@ Option<Bitmap> load_p5(Slice<u8> data){
 	i32 height = 0;
 
 	{
-		usize width_end = data.linear_search([](u8 b){
+		usize width_end = linear_search(data, [](u8 b){
 			return b == ' ';
 		}).unwrap_or(0);
 
@@ -254,7 +267,7 @@ Option<Bitmap> load_p5(Slice<u8> data){
 	data = data.skip(1); // space
 
 	{
-		usize height_end = data.linear_search([](u8 b){
+		usize height_end = linear_search(data, [](u8 b){
 			return b == '\n';
 		}).unwrap_or(0);
 
@@ -292,8 +305,6 @@ void save_p5(Bitmap const& bmp, IO_Writer w){
 	w.write(bmp.pixel_data);
 }
 
-constexpr bool enable_crc_checks = true;
-
 template<unsigned int N>
 struct CRC32<Array<f32, N>>{
 	u32 get(Array<f32, N> const& arr){
@@ -311,7 +322,6 @@ struct Convolution_Context{
 	volatile u32 _kernel_check_value;
 	Bitmap input;
 	Arena* scratch;
-	TaskContext* context;
 
 	static_assert(CRC32_Checkable<Array<f32, N * N>>, "Not checkable");
 
@@ -329,14 +339,17 @@ struct Convolution_Context{
 		_kernel_check_value = CRC32<Array<f32, N * N>>{}.get(k);
 	}
 
-	i32 get(i32 x, i32 y){
+	Option<i32> get(i32 x, i32 y){
 		if constexpr(enable_crc_checks) {
 			COMPILER_MEMORY_BARRIER();
-			if(context)
-				crc32_ensure<Array<f32, N*N>>(_kernel_check_value, _kernel, context);
-			else
-				crc32_ensure<Array<f32, N*N>>(_kernel_check_value, _kernel);
+			if(_kernel_check_value != crc32(_kernel)){
+				return {};
+			}
 			COMPILER_MEMORY_BARRIER();
+		}
+
+		if(u32(x) >= u32(input.width) || u32(y) >= u32(input.height)){
+			return {};
 		}
 
 		auto r = rect_of(x, y);
@@ -368,6 +381,5 @@ struct Convolution_Context{
 		, _kernel_check_value{}
 		, input{}
 		, scratch{}
-		, context{}
 	{}
 };
