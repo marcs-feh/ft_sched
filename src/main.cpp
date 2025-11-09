@@ -116,11 +116,6 @@ void print_info(){
 	// msg = buffer_printf(buf, "  WAV file size:   %td", sizeof(scattered_and_lost_wav_data)); printf("%s\r\n", msg.data);
 }
 
-constexpr f64 gaussian(f64 peak, f64 stddev, f64 x){
-	auto exponent = - (x*x) / (2 * stddev * stddev);
-	return peak * exp(exponent);
-}
-
 static inline
 isize _io_stdout_func(u8 operation, void*, Slice<u8> buf){
 	switch(operation){
@@ -258,8 +253,8 @@ struct TripleTask {
 	static void _subtask_wrapper(RawTask* t){
 		auto subtask = (SubTask*)t->args;
 		auto context = TaskContext { &subtask->_task };
-		ensure(subtask->_task.deadline, "Deadline is required");
-		context.reset();
+		ensure(subtask->_task.supervisor, "A supervisor is required");
+		context.reset_deadline();
 
 		subtask->parent->started.fetch_add(1, memory_order_relaxed);
 
@@ -267,7 +262,7 @@ struct TripleTask {
 			sleep_for(Duration::from_milli(1));
 		}
 
-		context.reset();
+		context.reset_deadline();
 		subtask->_result = Output{ subtask->_func(context) };
 	}
 
@@ -284,13 +279,20 @@ struct TripleTask {
 
 };
 
-template<typename F>
-auto make_tmr_task(Arena* arena, DeadlineWatcher* supervisor, Duration sub_task_deadline, F&& func){
+template<typename F> [[nodiscard]]
+auto make_tmr_task(
+	Arena* arena,
+	usize subtask_arena_size,
+	usize subtask_stack_size,
+	DeadlineWatcher* supervisor,
+	Duration sub_task_deadline,
+	F&& func
+){
 	auto restore = arena->offset;
 	using TaskType = TripleTask<decltype(func(TaskContext{})), F, decltype(_cancellation_nop)>;
 
 	auto tmr = make<TaskType>(arena, func);
-	auto watcher = make_deadline_watcher(arena, 3);
+	auto watcher = make_deadline_watcher(arena, 6);
 	if(!tmr || !watcher){
 		arena->offset = restore;
 		return (TaskType*)nullptr;
@@ -302,7 +304,7 @@ auto make_tmr_task(Arena* arena, DeadlineWatcher* supervisor, Duration sub_task_
 	for(int i = 0; i < 3; i++){
 		auto subtask = &tmr->subtasks[i];
 
-		if(!init_raw_task(subtask->raw_task(), arena, 0, tmr->_subtask_wrapper, subtask)){
+		if(!init_raw_task(subtask->raw_task(), arena, subtask_arena_size, 0, tmr->_subtask_wrapper, subtask)){
 			arena->offset = restore;
 			return (TaskType*)nullptr;
 		}
@@ -329,7 +331,7 @@ void entrypoint(){
 		swdg_init(Duration::from_milli(1'000));
 		DeadlineWatcher* swdg_watcher = make_deadline_watcher(&task_arena, 32);
 		ensure(swdg_watcher != nullptr, "Failed to create swdg_watcher");
-		auto watcher_task = make_basic_task(&task_arena, [swdg_watcher](TaskContext){
+		auto watcher_task = make_basic_task(&task_arena, 512, [swdg_watcher](TaskContext){
 			while(1){
 				auto ok = swdg_watcher->scan();
 				if(ok){
@@ -346,9 +348,13 @@ void entrypoint(){
 	DeadlineWatcher* watcher = make_deadline_watcher(&task_arena, 32);
 	ensure(watcher, "Failed to create watcher");
 
-	make_tmr_task(&task_arena, watcher, Duration::from_milli(200), [](TaskContext ctx) -> Unit {
+	auto tmr = make_tmr_task(&task_arena, 1024, 0, watcher, Duration::from_milli(900'000), [](TaskContext ctx) -> Unit {
 		sleep_for(Duration::from_milli(100 * ctx.id()));
-		printf("Hello %d\r\n", int(ctx.id()));
+		if(ctx.id() == 3){
+			ctx.panic("Uh oh!");
+		}
+
+		printf("Hello %d\r\n", int(ctx.id())); fflush(stdout);
 		return {};
 	});
 
@@ -360,7 +366,9 @@ void entrypoint(){
 	fflush(stdout);
 	printf("------------------\r\n");
 
+	#if defined(FT_SCHED_PLATFORM_STM32F411CEU6)
 	while(1){}
+	#endif
 }
 
 //// ---------------------------------------------

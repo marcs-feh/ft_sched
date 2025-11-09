@@ -6,36 +6,43 @@ u32 next_raw_task_id(){
 	return raw_task_id_counter.fetch_add(1, memory_order_relaxed);
 }
 
-// TODO: use a sub-arena to avoid ownership issues
-bool init_raw_task(RawTask* task, Arena* a, usize stack_size, RawTaskFunc func, void* args){
+bool init_raw_task(RawTask* task, Arena* parent, usize sub_arena_size, usize stack_size, RawTaskFunc func, void* args){
 	ensure(task != nullptr, "Must be non-null");
+	auto restore = parent->offset;
 
-	auto restore = a->offset;
+	// Enough to hold the raw task itself + minimum stack + some padding
+	stack_size = max(task_min_stack_size, stack_size);
+	auto min_sub_arena_size = stack_size + sizeof(RawTask) + (sizeof(void*) * 2);
+
+	task->arena = parent->make_sub(max<usize>(sub_arena_size, min_sub_arena_size));
+	if(!task->arena){
+		return false;
+	}
+
 	task->func = func;
-	task->arena = a;
 	task->args = args;
 	task->id = next_raw_task_id();
 	task->stack_size = stack_size;
 
-		task->_status.store(TaskStatus_Initialized);
+	task->_status.store(TaskStatus_Initialized);
 
-	auto ok = task->_platform_init(a, stack_size, func, args);
+	auto ok = task->_platform_init(task->arena, stack_size, func, args);
 	if(!ok){
-		a->offset = restore;
+		// Not enough space, roll back arena
+		parent->offset = restore;
 	}
 	return ok;
-
 }
 
-RawTask* make_raw_task(Arena* a, usize stack_size, RawTaskFunc func, void* args){
-	auto restore = a->offset;
-	auto task = make<RawTask>(a);
+RawTask* make_raw_task(Arena* parent, usize sub_arena_size, usize stack_size, RawTaskFunc func, void* args){
+	auto restore = parent->offset;
+	auto task = make<RawTask>(parent);
 
-	if(task && init_raw_task(task, a, stack_size, func, args)){
+	if(task && init_raw_task(task, parent, sub_arena_size, stack_size, func, args)){
 		return task;
 	}
 
-	a->offset = restore;
+	parent->offset = restore;
 	return nullptr;
 }
 

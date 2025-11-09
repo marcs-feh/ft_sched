@@ -28,7 +28,7 @@ void swdg_timer_func(RawTask*){
 }
 
 void swdg_init(Duration n){
-	constexpr usize arena_size = 256 * sizeof(void*);
+	constexpr usize arena_size = 100 * sizeof(void*);
 
 	static Arena arena = {};
 	static bool initialized = false;
@@ -37,7 +37,7 @@ void swdg_init(Duration n){
 	if(!initialized){
 		arena = arena_from_buffer({&arena_memory[0], arena_size});
 		swdg_limit = n;
-		auto ok = init_raw_task(&swdg_task, &arena, 0, swdg_timer_func, nullptr);
+		auto ok = init_raw_task(&swdg_task, &arena, arena_size - sizeof(Arena) - 8, 0, swdg_timer_func, nullptr);
 		ensure(ok, "Failed to init software watchdog");
 		initialized = true;
 		printf("[swdg] Initialized\n");

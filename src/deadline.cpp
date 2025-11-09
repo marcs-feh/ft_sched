@@ -19,10 +19,23 @@ bool DeadlineWatcher::watch(RawTask* task, Duration limit){
 	free_slot->task = task;
 	free_slot->limit = limit;
 	free_slot->last_tick = tick_now();
-	task->deadline = free_slot;
+
+	ensure(task->supervisor == nullptr || task->supervisor == this, "This task already has a supervisor attached");
+	task->supervisor = this;
+
 	_count.fetch_add(1, memory_order_relaxed);
 
 	return true;
+}
+
+DeadlineSlot* DeadlineWatcher::get(RawTask* t){
+	auto g = _lock.guard();
+	for(auto& slot : slots){
+		if(slot.task == t){
+			return &slot;
+		}
+	}
+	return nullptr;
 }
 
 void DeadlineWatcher::_remove_no_lock(DeadlineSlot* node){
@@ -46,6 +59,17 @@ void DeadlineWatcher::clear(){
 
 extern "C" int printf(cstring, ...);
 
+bool DeadlineWatcher::reset_deadline(RawTask* t){
+	auto guard = _lock.guard();
+	for(auto& slot : slots){
+		if(slot.task == t){
+			slot.reset();
+			return true;
+		}
+	}
+	return false;
+}
+
 // Scan for deadline violations and remove Done tasks
 bool DeadlineWatcher::scan(){
 	auto guard = _lock.guard();
@@ -66,20 +90,17 @@ bool DeadlineWatcher::scan(){
 
 		auto elapsed = tick_diff(now, slot.last_tick);
 
-		// printf("CHECKING: %d NOW=%td LAST=%td E=%td MAX=%td\n", slot.task->id,
-		// 	tick_diff(now, 0).to_milli(), tick_diff(slot.last_tick, 0).to_milli(),
-		// 	elapsed.to_milli(), slot.limit.to_milli()
-		// ); fflush(stdout);
-
 		if(elapsed > slot.limit){
 			printf("[Error] Deadline Violation, cancelling task (%d)\r\n", int(slot.task->id));
 			slot.task->cancel();
+			_remove_no_lock(&slot);
 			ok = false;
 		}
 	}
 
 	return ok;
 }
+
 
 void init_deadline_watcher(DeadlineWatcher* w, Slice<DeadlineSlot> slots){
 	mem_zero(w, sizeof(DeadlineWatcher));

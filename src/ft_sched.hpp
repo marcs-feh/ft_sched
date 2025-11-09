@@ -93,6 +93,44 @@ struct DeadlineSlot {
 	}
 };
 
+//// Deadlines
+struct DeadlineWatcher {
+	Slice<DeadlineSlot> slots;
+	Spinlock _lock{};
+	Atomic<u32> _count;
+
+	auto lock_guard(){
+		return _lock.guard();
+	}
+
+	usize count() const {
+		return _count.load(memory_order_relaxed);
+	}
+
+	bool watch(RawTask* task, Duration limit);
+
+	bool reset_deadline(RawTask* t);
+
+	DeadlineSlot* get(RawTask* t);
+
+	void _remove_no_lock(DeadlineSlot* node);
+
+	void remove(DeadlineSlot* node);
+
+	void clear();
+
+	// Scan for deadline violations and remove Done tasks
+	bool scan();
+
+	DeadlineWatcher()
+		: slots{}
+		, _lock{}
+	{}
+};
+
+void init_deadline_watcher(DeadlineWatcher* w, Slice<DeadlineSlot> slots);
+
+DeadlineWatcher* make_deadline_watcher(Arena* a, usize slot_count);
 
 // Task object that closely maps to a regular thread
 using RawTaskFunc = void (*)(RawTask* t);
@@ -105,12 +143,14 @@ using TaskCancelCallback = void (*)(RawTask* self);
 
 constexpr usize task_stack_alignment = max<usize>(alignof(void*), 16);
 
+constexpr usize task_min_stack_size = 200;
+
 struct RawTask {
 	RawTaskFunc func = nullptr;
 	Arena* arena = nullptr;
 	void* args = nullptr;
 	u32 stack_size = 0;
-	DeadlineSlot* deadline = nullptr;
+	DeadlineWatcher* supervisor = nullptr;
 	u32 args_size = 0;
 	u32 id{};
 	Atomic<TaskStatus> _status = TaskStatus_Initialized;
@@ -131,6 +171,7 @@ struct RawTask {
 				"[Task %2d] Failed to join task\r\n", int(id)
 			);
 		}
+		arena->reset();
 	}
 
 	void cancel(CALLER_LOCATION){
@@ -140,6 +181,7 @@ struct RawTask {
 				"[Task %2d] Failed to cancel task\r\n", int(id)
 			);
 		}
+		arena->reset();
 	}
 
 	~RawTask(){}
@@ -151,9 +193,9 @@ struct RawTask {
 
 u32 next_raw_task_id();
 
-bool init_raw_task(RawTask* task, Arena* a, usize stack_size, RawTaskFunc func, void* args);
+bool init_raw_task(RawTask* task, Arena* parent, usize sub_arena_size, usize stack_size, RawTaskFunc func, void* args);
 
-RawTask* make_raw_task(Arena* a, usize stack_size, RawTaskFunc func, void* args);
+RawTask* make_raw_task(Arena* parent, usize sub_arena_size, usize stack_size, RawTaskFunc func, void* args);
 
 template<typename Impl, typename T>
 concept Task = requires(Impl impl){
@@ -176,7 +218,7 @@ struct TaskContext {
 	void ensure(bool pred, cstring msg, CALLER_LOCATION){
 		if(!pred){
 			error_printf(caller_location.file_name(), caller_location.line(),
-				"[Task %2d] Assertion failed: %s\r\n",
+				"[Task %d] Assertion failed: %s\r\n",
 				int(task->id), msg
 			);
 			task->cancel();
@@ -185,15 +227,16 @@ struct TaskContext {
 
 	void panic(cstring msg, CALLER_LOCATION){
 		error_printf(caller_location.file_name(), caller_location.line(),
-			"[Task %2d] Panic: %s\r\n",
+			"[Task %d] Panic: %s\r\n",
 			int(task->id), msg
 		);
 		task->cancel(caller_location);
 	}
 
-	void reset(){
-		if(task->deadline)
-			task->deadline->reset();
+	void reset_deadline(){
+		if(task->supervisor){
+			task->supervisor->reset_deadline(task);
+		}
 	}
 
 	u32 id() const {
@@ -320,19 +363,24 @@ struct BasicTask {
 static_assert(Task<BasicTask<Unit, decltype(_task_nop), decltype(_cancellation_nop)>, Unit>, "BasicTask does not conform to Task concept");
 
 template<typename F>
-auto make_basic_task(Arena* a, F&& func){
+auto make_basic_task(Arena* parent, usize task_arena_size, usize stack_size, F&& func){
 	using TaskType = BasicTask<decltype(func(TaskContext{})), F, decltype(_cancellation_nop)>;
-	auto t = make<TaskType>(a, forward<F>(func));
+	auto t = make<TaskType>(parent, forward<F>(func));
 	if(!t){
 		return (TaskType*)nullptr;
 	}
 	t->_task.on_cancel = t->_basic_task_cancel_wrapper;
 
-	if(!init_raw_task(&t->_task, a, 0, t->_basic_task_wrapper, t)){
+	if(!init_raw_task(&t->_task, parent, task_arena_size, stack_size, t->_basic_task_wrapper, t)){
 		return (TaskType*)nullptr;
 	}
 
 	return t;
+}
+
+template<typename F>
+auto make_basic_task(Arena* parent, usize task_arena_size, F&& func){
+	return make_basic_task(parent, task_arena_size, 0, forward<F>(func));
 }
 
 // template<typename F, Callable<void> C>
@@ -428,41 +476,6 @@ auto make_basic_task(Arena* a, F&& func){
 // bool init_tmr_task(RawTask* task, Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args, usize args_size);
 
 // TMR_Task* make_tmr_task(Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args, usize args_size);
-
-//// Deadlines
-struct DeadlineWatcher {
-	Slice<DeadlineSlot> slots;
-	Spinlock _lock{};
-	Atomic<u32> _count;
-
-	auto lock_guard(){
-		return _lock.guard();
-	}
-
-	usize count() const {
-		return _count.load(memory_order_relaxed);
-	}
-
-	bool watch(RawTask* task, Duration limit);
-
-	void _remove_no_lock(DeadlineSlot* node);
-
-	void remove(DeadlineSlot* node);
-
-	void clear();
-
-	// Scan for deadline violations and remove Done tasks
-	bool scan();
-
-	DeadlineWatcher()
-		: slots{}
-		, _lock{}
-	{}
-};
-
-void init_deadline_watcher(DeadlineWatcher* w, Slice<DeadlineSlot> slots);
-
-DeadlineWatcher* make_deadline_watcher(Arena* a, usize slot_count);
 
 
 //// Software watchdog timer

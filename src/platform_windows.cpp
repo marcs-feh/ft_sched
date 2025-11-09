@@ -41,7 +41,7 @@ DWORD task_windows_wrapper(LPVOID arg){
 bool RawTask::_platform_init(Arena*, usize stack_size, RawTaskFunc, void*){
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 
-	constexpr usize min_stack_size = 64 * 1024;
+	constexpr usize platform_min_stack_size = 64 * 1024;
 
 	if(_status.load() != TaskStatus_Initialized){
 		// TODO: LOG: "Invalid task status";
@@ -50,7 +50,7 @@ bool RawTask::_platform_init(Arena*, usize stack_size, RawTaskFunc, void*){
 	}
 
 	DWORD id;
-	HANDLE handle = CreateThread(NULL, max(min_stack_size, stack_size), task_windows_wrapper, (LPVOID)this, 0, &id);
+	HANDLE handle = CreateThread(NULL, max(platform_min_stack_size, stack_size), task_windows_wrapper, (LPVOID)this, 0, &id);
 	specific->handle.store(handle, memory_order_seq_cst);
 
 	if(handle == NULL){

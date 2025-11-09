@@ -33,8 +33,9 @@ struct RawTaskPlatformSpecific {
 	u32 stack_size;
 };
 
-constexpr usize min_stack_size = sizeof(StackType_t) * configMINIMAL_STACK_SIZE;
-constexpr usize default_stack_size = max(min_stack_size, sizeof(StackType_t) * 200);
+constexpr usize platform_min_stack_size = sizeof(StackType_t) * configMINIMAL_STACK_SIZE;
+
+static_assert(platform_min_stack_size >= task_min_stack_size, "Stack size is too small");
 
 static
 void _freertos_task_wrapper(void* task_ptr){
@@ -55,15 +56,11 @@ void _freertos_task_wrapper(void* task_ptr){
 
 bool RawTask::_platform_init(Arena* arena, usize stack_size, RawTaskFunc, void*){
 	if(_status.load() != TaskStatus_Initialized){
-		// TODO: LOG: "Invalid task status";
 		_status.store(TaskStatus_Fault);
 		return false;
 	}
 
-	if(!stack_size){
-		stack_size = default_stack_size;
-	}
-	stack_size = max(stack_size, min_stack_size);
+	stack_size = max(stack_size, platform_min_stack_size);
 
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 
