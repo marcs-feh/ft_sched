@@ -247,12 +247,7 @@ struct TripleTask {
 
 	void join(){
 		while(subtasks_watcher->count()){
-			// for(auto& slot : subtasks_watcher->slots){
-			// 	printf("L?:%d | Slot: %p (cancelled by: %p) Count: %d - L=%d\n", int(subtasks_watcher->_lock._state), slot.key, slot.cancel, int(subtasks_watcher->_count.load()), int(slot.limit.to_milli()) );fflush(stdout);
-			// }
-
 			auto scan = subtasks_watcher->scan();
-			// printf("--tmrjoin-- count=%d scan=%d\n", subtasks_watcher->count(), int(scan));fflush(stdout);
 
 			if(!scan){
 				break;
@@ -274,10 +269,11 @@ struct TripleTask {
 		// while(subtask->parent->running.load(memory_order_relaxed) != 3){
 		// 	task_yield();
 		// }
-		// context->reset_deadline();
+		context.reset_deadline();
 
 		subtask->_result = Output{ subtask->_func(context) };
 		subtask->parent->running.fetch_sub(1, memory_order_relaxed);
+		// subtask->parent->subtasks_watcher->remove_key(subtask);
 	}
 
 
@@ -343,7 +339,7 @@ auto make_tmr_task(
 		auto watch_ok = subtask->raw_task()->attach_supervisor(tmr->subtasks_watcher, subtask_deadline);
 		ensure(watch_ok, "Failed to watch task");
 
-		if(!init_raw_task(subtask->raw_task(), arena, subtask_arena_size, 0, tmr->_subtask_wrapper, subtask)){
+		if(!init_raw_task(subtask->raw_task(), arena, subtask_arena_size, subtask_stack_size, tmr->_subtask_wrapper, subtask)){
 			arena->offset = restore;
 			return (TaskType*)nullptr;
 		}
@@ -369,7 +365,7 @@ void entrypoint(){
 		mem_copy(&swdg_watcher->name, "SWDG", sizeof(swdg_watcher->name) - 1);
 
 		ensure(swdg_watcher != nullptr, "Failed to create swdg_watcher");
-		auto watcher_task = make_basic_task(&task_arena, 512, [swdg_watcher](TaskContext){
+		[[maybe_unused]] auto watcher_task = make_basic_task(&task_arena, 512, [swdg_watcher](TaskContext){
 			while(1){
 				// printf("[swdg] Scan %d\r\n", int(swdg_watcher->count())); fflush(stdout);
 				auto ok = swdg_watcher->scan() && swdg_watcher->count();
@@ -387,18 +383,17 @@ void entrypoint(){
 	DeadlineWatcher* watcher = make_deadline_watcher(&task_arena, 32);
 	ensure(watcher, "Failed to create watcher");
 
-	auto tmr = make_tmr_task(&task_arena, 1024, 0, Duration::from_milli(1000), [](TaskContext ctx) -> Unit {
-		printf("Hello %d\n", int(ctx.id())); fflush(stdout);
-		if(ctx.id() % 3 == 0){
-			sleep_for(Duration::from_milli(2000));
-		}
-		printf("Bye %d\n", int(ctx.id())); fflush(stdout);
+	auto tmr = make_tmr_task(&task_arena, 2048, 0, Duration::from_milli(1000), [](TaskContext ctx) -> Unit {
+		printf("Hello %d\r\n", int(ctx.id())); fflush(stdout);
+		sleep_for(Duration::from_milli(ctx.id() * 50));
+		printf("Bye %d\r\n", int(ctx.id())); fflush(stdout);
 		return {};
 	});
 
 	ensure(tmr, "Failed to create TMR task");
 
-	tmr->attach_supervisor(swdg_watcher, Duration::from_milli(4'000));
+	// bool attached = tmr->attach_supervisor(swdg_watcher, Duration::from_milli(4'000));
+	// ensure(attached, "Could not attach swdg supervisor");
 	tmr->join();
 
 	fflush(stdout);

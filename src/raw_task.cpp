@@ -49,7 +49,6 @@ RawTask* make_raw_task(Arena* parent, usize sub_arena_size, usize stack_size, Ra
 static inline
 void _raw_task_slot_cancellation(void* data){
 	auto t = (RawTask*)data;
-	// printf("Cancellation by deadline slot:");
 	t->cancel();
 }
 

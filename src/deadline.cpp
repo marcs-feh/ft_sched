@@ -1,5 +1,10 @@
 #include "ft_sched.hpp"
 
+constexpr bool deadline_config_verbose = true;
+
+extern "C" int printf(cstring, ...);
+
+
 [[nodiscard]]
 bool DeadlineWatcher::add(void* key, SlotCancellationCallback cancel, Duration limit){
 	auto guard = _lock.guard();
@@ -22,6 +27,7 @@ bool DeadlineWatcher::add(void* key, SlotCancellationCallback cancel, Duration l
 	free_slot->cancel = cancel;
 
 	_count.fetch_add(1);
+	if constexpr(deadline_config_verbose) { printf("Added: %p\r\n", key); fflush(stdout); }
 
 	return true;
 }
@@ -58,12 +64,11 @@ void DeadlineWatcher::clear(){
 	_count.store(0);
 }
 
-extern "C" int printf(cstring, ...);
-
 bool DeadlineWatcher::reset_deadline(void* key){
 	auto guard = _lock.guard();
 	for(auto& slot : slots){
 		if(slot.key == key){
+			if constexpr(deadline_config_verbose) { printf("Resetting deadline for: %p\r\n", key); fflush(stdout); }
 			slot.reset();
 			return true;
 		}
@@ -72,10 +77,9 @@ bool DeadlineWatcher::reset_deadline(void* key){
 }
 
 void DeadlineWatcher::remove_key(void* key){
-	// auto guard = _lock.guard();
-
 	for(auto& slot : slots){
 		if(slot.key == key){
+			if constexpr(deadline_config_verbose) { printf("Removing: %p\r\n", key); fflush(stdout); }
 			_remove_no_lock(&slot);
 		}
 	}

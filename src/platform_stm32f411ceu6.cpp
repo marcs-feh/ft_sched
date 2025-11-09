@@ -43,10 +43,12 @@ void _freertos_task_wrapper(void* task_ptr){
 	auto specific = (RawTaskPlatformSpecific*)(&task->_specific);
 
 	task->_status.store(TaskStatus_Started);
-	// printf("ENTER TASK %d\r\n", int(task->id));
 	task->func(task);
-	// printf("FINISH TASK %d\r\n", int(task->id));
 	task->_status.store(TaskStatus_Done);
+
+	if(task->supervisor){
+		task->supervisor->remove_key((void*)task);
+	}
 
 	/* IMPORTANT: Yield spin */
 	while(1){
@@ -77,7 +79,7 @@ bool RawTask::_platform_init(Arena* arena, usize stack_size, RawTaskFunc, void*)
 		return false;
 	}
 	if(!stack){
-		printf("Failed to allocate stack\r\n");
+		printf("Failed to allocate stack: (offset=%d, capacity=%d, size=%d)\r\n", int(arena->offset), int(arena->capacity), int(stack_size));
 		return false;
 	}
 
@@ -121,6 +123,10 @@ bool RawTask::_platform_join(){
 
 bool RawTask::_platform_cancel(){
 	_status.store(TaskStatus_Fault);
+	if(supervisor){
+		supervisor->remove_key((void*)this);
+	}
+
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 	TaskHandle_t handle = specific->handle.load();
 

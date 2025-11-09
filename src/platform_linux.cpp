@@ -1,4 +1,7 @@
-#define _DEFAULT_SOURCE
+#ifndef _DEFAULT_SOURCE
+	#define _DEFAULT_SOURCE
+#endif
+
 #include <pthread.h>
 #include <semaphore.h>
 #include <time.h>
@@ -40,6 +43,9 @@ void* task_linux_wrapper(void* task_ptr){
 	task->func(task);
 
 	task->_status.store(TaskStatus_Done);
+	if(task->supervisor){
+		task->supervisor->remove_key((void*)task);
+	}
 	return NULL;
 }
 
@@ -69,11 +75,13 @@ bool RawTask::_platform_join(){
 		return true;
 	}
 
-	auto res = pthread_join(specific->handle, NULL) == 0;
+	auto ok = pthread_join(specific->handle, NULL) == 0;
+
 	specific->handle_initialized.store(false);
 	status = this->_status.load();
-	ensure(status == TaskStatus_Fault || status == TaskStatus_Done, "Invalid task status");
-	return true;
+	ensure(status >= TaskStatus_Done, "Invalid task status");
+
+	return ok;
 }
 
 bool RawTask::_platform_cancel(){
@@ -132,6 +140,10 @@ void sleep_for(Duration d){
 			break;
 		}
 	}
+}
+
+void task_yield(){
+	sleep_for({1});
 }
 
 static_assert(sizeof(RawTaskPlatformSpecific) <= sizeof(RawTaskPlatformSpecificData), "Platform specific struct has insufficient size");

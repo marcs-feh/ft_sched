@@ -56,7 +56,7 @@ C_Builder = {}
 function execute_build(flash_serial, verbose)
 	local cc = 'clang++'
 	local cflags = {'-std=c++20', '-fwrapv', '-fno-strict-aliasing', '-fno-rtti', '-fno-exceptions', '-I.'}
-	local wflags = {'-Wall', '-Wextra', '-Werror=return-type'}
+	local wflags = {'-Wall', '-Wextra', '-Werror=return-type', '-fdiagnostics-color=always'}
 	local ldflags = {}
 	local ar = 'ar'
 
