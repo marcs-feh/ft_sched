@@ -365,8 +365,9 @@ void entrypoint(){
 
 //// ---------------------------------------------
 #if defined(FT_SCHED_NO_MAIN)
+extern "C" 
 __attribute__((noinline)) 
-extern "C" void ft_sched_entrypoint()
+void ft_sched_entrypoint()
 #else
 int main()
 #endif
