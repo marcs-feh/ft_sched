@@ -72,7 +72,7 @@ bool DeadlineWatcher::scan(){
 		// ); fflush(stdout);
 
 		if(elapsed > slot.limit){
-			printf("DEADLINE VIOLATION ON TASK %d\n", int(slot.task->id));
+			error_printf("[Error] Deadline Violation, cancelling task (%d)\r\n", int(slot.task->id));
 			slot.task->cancel();
 			ok = false;
 		}
