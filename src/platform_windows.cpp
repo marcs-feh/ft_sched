@@ -30,11 +30,14 @@ static_assert(Atomic<HANDLE>::is_always_lock_free, "Atomic handle is not lock fr
 static
 DWORD task_windows_wrapper(LPVOID arg){
 	auto task = (RawTask*)arg;
+	
 	task->_status.store(TaskStatus_Started);
-
 	task->func(task);
-
 	task->_status.store(TaskStatus_Done);
+
+	if(task->supervisor)
+		task->supervisor->remove_key((void*)task);
+
 	return 0;
 }
 
@@ -94,6 +97,10 @@ bool RawTask::_platform_join(){
 }
 
 bool RawTask::_platform_cancel(){
+	if(supervisor){
+		supervisor->remove_key((void*)this);
+	}
+
 	auto status = this->_status.load(memory_order_relaxed);
 	if(status >= TaskStatus_Done){
 		return false;

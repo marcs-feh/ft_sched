@@ -84,19 +84,10 @@ struct RawTask;
 void task_yield();
 
 //// Deadlines
-struct DeadlineSlot {
-	TimeTick last_tick;
-	Duration limit;
-	RawTask* task;
-
-	void reset(){
-		last_tick = tick_now();
-	}
-};
 
 using SlotCancellationCallback = void (*) (void* data);
 
-struct DeadlineSlot2 {
+struct DeadlineSlot {
 	TimeTick last_tick;
 	Duration limit;
 	void* key;
@@ -105,12 +96,20 @@ struct DeadlineSlot2 {
 	void reset(){
 		last_tick = tick_now();
 	}
+
+	DeadlineSlot()
+		: last_tick{0}
+		, limit{0}
+		, key{nullptr}
+		, cancel{nullptr}
+	{}
 };
 
 struct DeadlineWatcher {
 	Slice<DeadlineSlot> slots;
 	Spinlock _lock{};
 	Atomic<u32> _count;
+	char name[12] = {};
 
 	auto lock_guard(){
 		return _lock.guard();
@@ -120,28 +119,28 @@ struct DeadlineWatcher {
 		return _count.load(memory_order_relaxed);
 	}
 
-	bool watch(RawTask* task, Duration limit);
+	[[nodiscard]]
+	bool add(void* key, SlotCancellationCallback cancel, Duration limit);
 
-	bool reset_deadline(RawTask* t);
+	bool reset_deadline(void* key);
 
-	DeadlineSlot* get(RawTask* t);
-
-	void _remove_no_lock(DeadlineSlot* node);
+	DeadlineSlot* get(void* key);
 
 	void remove(DeadlineSlot* node);
 
+	void remove_key(void* key);
+
 	void clear();
 
-	// Scan for deadline violations and remove Done tasks
 	bool scan();
 
-	// Scan for deadline violations stop at the first violation
-	RawTask* scan_until_violation();
+	void _remove_no_lock(DeadlineSlot* node);
 
 	DeadlineWatcher()
 		: slots{}
 		, _lock{}
-	{}
+	{
+	}
 };
 
 void init_deadline_watcher(DeadlineWatcher* w, Slice<DeadlineSlot> slots);
@@ -184,7 +183,7 @@ struct RawTask {
 		auto ok = _platform_join();
 		if(!ok){
 			error_printf(caller_location.file_name(), caller_location.line(),
-				"[Task %2d] Failed to join task\r\n", int(id)
+				"[Task %2d] Failed to join task (%p)\r\n", int(id), this
 			);
 		}
 		arena->reset();
@@ -192,13 +191,17 @@ struct RawTask {
 
 	void cancel(CALLER_LOCATION){
 		auto ok = _platform_cancel();
+
 		if(!ok){
 			error_printf(caller_location.file_name(), caller_location.line(),
-				"[Task %2d] Failed to cancel task\r\n", int(id)
+				"[Task %2d] Failed to cancel task (%p)\r\n", int(id), this
 			);
 		}
 		arena->reset();
 	}
+
+	[[nodiscard]]
+	bool attach_supervisor(DeadlineWatcher* watcher, Duration limit);
 
 	~RawTask(){}
 
@@ -212,6 +215,7 @@ u32 next_raw_task_id();
 bool init_raw_task(RawTask* task, Arena* parent, usize sub_arena_size, usize stack_size, RawTaskFunc func, void* args);
 
 RawTask* make_raw_task(Arena* parent, usize sub_arena_size, usize stack_size, RawTaskFunc func, void* args);
+
 
 template<typename Impl, typename T>
 concept Task = requires(Impl impl){
@@ -355,8 +359,8 @@ struct BasicTask {
 		return _task.id;
 	}
 
-	void cancel(){
-		_task.cancel();
+	void cancel(CALLER_LOCATION){
+		_task.cancel(caller_location);
 
 		// NOTE: Mainly for safety, ensure that whatever was here is zeroed,
 		// this can lead to edge case leaks when the result is partially

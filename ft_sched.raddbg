@@ -1,15 +1,16 @@
 // raddbg 0.9.23 project file
 
-recent_file: path: "D:/a/_work/1/s/src/vctools/crt/vcstartup/src/startup/exe_common.inl"
 recent_file: path: "src/main.cpp"
+recent_file: path: "d:/os/obj/amd64fre/minkernel/crts/ucrt/src/appcrt/startup/mt/objfre/amd64/minkernel/crts/ucrt/src/appcrt/startup/abort.cpp"
+recent_file: path: "src/deadline.cpp"
 recent_file: path: "src/platform_windows.cpp"
+recent_file: path: "D:/a/_work/1/s/src/vctools/crt/vcstartup/src/startup/exe_common.inl"
 recent_file: path: "d:/os/obj/amd64fre/minkernel/crts/ucrt/src/appcrt/stdio/mt/objfre/amd64/minkernel/crts/ucrt/src/appcrt/stdio/puts.cpp"
 recent_file: path: "src/ft_sched.hpp"
 recent_file: path: "src/base.cpp"
 recent_file: path: "src/raw_task.cpp"
 recent_file: path: "src/software_watchdog.cpp"
 recent_file: path: "../../../Programs/MSVC/VC/Tools/MSVC/14.44.35207/include/atomic"
-recent_file: path: "d:/os/obj/amd64fre/minkernel/crts/ucrt/src/appcrt/startup/mt/objfre/amd64/minkernel/crts/ucrt/src/appcrt/startup/abort.cpp"
 recent_file: path: "src/image.cpp"
 recent_file: path: "src/base.hpp"
 recent_file: path: "src/task.cpp"
@@ -23,11 +24,7 @@ target:
 }
 breakpoint:
 {
-  address_location: "RawTask::reset"
+  address_location: "RawTask::_platform_join"
   hit_count: 0
-}
-breakpoint:
-{
-  address_location: entrypoint
-  hit_count: 1
+  enabled: 0
 }

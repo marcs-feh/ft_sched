@@ -1026,7 +1026,7 @@ struct LockGuard {
 
 	LockGuard(LockGuard const&) = delete;
 
-	LockGuard(LockGuard && g) {
+	LockGuard(LockGuard && g, CALLER_LOCATION) {
 		_mutex = exchange(g->_mutex, nullptr);
 	}
 

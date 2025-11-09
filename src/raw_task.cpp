@@ -46,6 +46,23 @@ RawTask* make_raw_task(Arena* parent, usize sub_arena_size, usize stack_size, Ra
 	return nullptr;
 }
 
+static inline
+void _raw_task_slot_cancellation(void* data){
+	auto t = (RawTask*)data;
+	printf("SLOT CANCEL:");
+	t->cancel();
+}
+
+[[nodiscard]]
+bool RawTask::attach_supervisor(DeadlineWatcher* watcher, Duration limit){
+	auto ok = watcher->add((void*)this, _raw_task_slot_cancellation, limit);
+	if(ok){
+		ensure(this->supervisor == nullptr || this->supervisor == watcher, "Task already has a supervisor attached");
+		this->supervisor = watcher;
+	}
+	return ok;
+}
+
 // bool init_tmr_task(TMR_Task* task, Arena* a, u32 subtask_arena_size, RawTaskFunc func, void* args){
 // 	auto restore = a->offset;
 

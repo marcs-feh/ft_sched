@@ -1,13 +1,13 @@
 #include "ft_sched.hpp"
 
 [[nodiscard]]
-bool DeadlineWatcher::watch(RawTask* task, Duration limit){
+bool DeadlineWatcher::add(void* key, SlotCancellationCallback cancel, Duration limit){
 	auto guard = _lock.guard();
 
 	DeadlineSlot* free_slot = nullptr;
 
 	for(auto& slot : slots){
-		if(slot.task == nullptr){
+		if(slot.key == nullptr){
 			free_slot = &slot;
 		}
 	}
@@ -16,22 +16,20 @@ bool DeadlineWatcher::watch(RawTask* task, Duration limit){
 		return false;
 	}
 	
-	free_slot->task = task;
+	free_slot->key = key;
 	free_slot->limit = limit;
 	free_slot->last_tick = tick_now();
+	free_slot->cancel = cancel;
 
-	ensure(task->supervisor == nullptr || task->supervisor == this, "This task already has a supervisor attached");
-	task->supervisor = this;
-
-	_count.fetch_add(1, memory_order_relaxed);
+	_count.fetch_add(1);
 
 	return true;
 }
 
-DeadlineSlot* DeadlineWatcher::get(RawTask* t){
+DeadlineSlot* DeadlineWatcher::get(void* key){
 	auto g = _lock.guard();
 	for(auto& slot : slots){
-		if(slot.task == t){
+		if(slot.key == key){
 			return &slot;
 		}
 	}
@@ -42,9 +40,11 @@ void DeadlineWatcher::_remove_no_lock(DeadlineSlot* node){
 	if(!node){ return; }
 	ensure(node >= slots.data && node < (slots.data + slots.len), "invalid slot");
 
-	node->task = nullptr;
+	node->key = nullptr;
+	node->cancel = nullptr;
 	node->limit = {0};
-	_count.fetch_add(-1, memory_order_relaxed);
+
+	_count.fetch_sub(1);
 }
 
 void DeadlineWatcher::remove(DeadlineSlot* node){
@@ -55,19 +55,30 @@ void DeadlineWatcher::remove(DeadlineSlot* node){
 void DeadlineWatcher::clear(){
 	auto guard = _lock.guard();
 	mem_zero(slots.data, slots.len * sizeof(*slots.data));
+	_count.store(0);
 }
 
 extern "C" int printf(cstring, ...);
 
-bool DeadlineWatcher::reset_deadline(RawTask* t){
+bool DeadlineWatcher::reset_deadline(void* key){
 	auto guard = _lock.guard();
 	for(auto& slot : slots){
-		if(slot.task == t){
+		if(slot.key == key){
 			slot.reset();
 			return true;
 		}
 	}
 	return false;
+}
+
+void DeadlineWatcher::remove_key(void* key){
+	// auto guard = _lock.guard();
+
+	for(auto& slot : slots){
+		if(slot.key == key){
+			_remove_no_lock(&slot);
+		}
+	}
 }
 
 // Scan for deadline violations and remove Done tasks
@@ -78,57 +89,33 @@ bool DeadlineWatcher::scan(){
 	bool ok = true;
 
 	for(auto& slot : slots){
-		if(!slot.task){
+		if(!slot.key){
 			continue;
 	 	}
 
-	 	auto status = slot.task->status();
-		if(status >= TaskStatus_Done){
-			_remove_no_lock(&slot);
-			continue;
-		}
-
 		auto elapsed = tick_diff(now, slot.last_tick);
 
+		// printf("Scanning: %p limit=%d elapsed=%d\r\n", slot.key, int(slot.limit.to_milli()), int(elapsed.to_milli()));
+
 		if(elapsed > slot.limit){
-			printf("[Error] Deadline Violation, cancelling task (%d)\r\n", int(slot.task->id));
-			slot.task->cancel();
+			if(name[0])
+				printf("[Error Watcher=%s] Deadline Violation, Cancelling (%p)\r\n", name, slot.key);
+			else
+				printf("[Error Watcher=%p] Deadline Violation, Cancelling (%p)\r\n", this, slot.key);
+
+			auto key = slot.key;
+			auto cancel = slot.cancel;
+
 			_remove_no_lock(&slot);
 			ok = false;
+
+			if(cancel){
+				cancel(key);
+			}
 		}
 	}
 
 	return ok;
-}
-
-RawTask* DeadlineWatcher::scan_until_violation(){
-	auto guard = _lock.guard();
-
-	auto now = tick_now();
-	bool ok = true;
-
-	for(auto& slot : slots){
-		if(!slot.task){
-			continue;
-	 	}
-
-	 	auto status = slot.task->status();
-		if(status >= TaskStatus_Done){
-			_remove_no_lock(&slot);
-			continue;
-		}
-
-		auto elapsed = tick_diff(now, slot.last_tick);
-
-		if(elapsed > slot.limit){
-			printf("[Error] Deadline Violation on task (%d)\r\n", int(slot.task->id));
-			// slot.task->cancel();
-			// _remove_no_lock(&slot);
-			return slot.task;
-		}
-	}
-
-	return nullptr;
 }
 
 void init_deadline_watcher(DeadlineWatcher* w, Slice<DeadlineSlot> slots){
