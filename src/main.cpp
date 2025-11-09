@@ -100,7 +100,7 @@ constexpr usize task_arena_size = (max_task_count * average_stack_size) + 1024;
 
 u8 task_arena_memory[task_arena_size];
 
-constexpr usize main_arena_size = 4096 * 1024;
+constexpr usize main_arena_size = 12 * 1024;
 u8 main_arena_memory[main_arena_size];
 
 void print_info(){
@@ -211,24 +211,118 @@ void do_regular_conv(){
 	} / splat<f32, 9>(4.0f));
 
 	auto begin = tick_now();
-	for(i32 x = 0; x < image.width; x++){
-		for(i32 y = 0; y < image.height; y++){
+	for(i32 y = 0; y < image.height; y++){
+		for(i32 x = 0; x < image.width; x++){
 			output.pixel_data[(y * output.width) + x] = clamp(0, (conv_horiz.get(x, y) + conv_vert.get(x, y)), 255);
 		}
-
 		crc32_ensure(image_check_value, image);
 	}
+
 	auto end = tick_now();
 	auto elapsed = tick_diff(end, begin);
-	printf("Elapsed: %dms\n", i32(elapsed.to_milli()));
 
 	dump_bitmap(output);
+}
+
+template<typename Output, Callable<Output, TaskContext> TaskFunc, Callable<void, TaskContext> OnCancel>
+struct TripleTask {
+	struct SubTask : public BasicTask<Output, TaskFunc, OnCancel>{
+		TripleTask* parent;
+
+		SubTask(TaskFunc f, OnCancel c, TripleTask* p)
+			: BasicTask<Output, TaskFunc, OnCancel>{f, c}
+			, parent{p}
+			{}
+	};
+
+	DeadlineWatcher* watcher;
+	SubTask subtasks[3];
+	Atomic<u32> started{0};
+
+	void join(CALLER_LOCATION){
+		while(watcher->count()){
+			watcher->scan();
+		}
+	}
+
+	static void _subtask_wrapper(RawTask* t){
+		auto subtask = (SubTask*)t->args;
+		auto context = TaskContext { &subtask->_task };
+		ensure(subtask->_task.deadline, "Deadline is required");
+		context.reset();
+
+		subtask->parent->started.fetch_add(1, memory_order_relaxed);
+
+		while(subtask->parent->started.load(memory_order_relaxed) != 3){
+			sleep_for(Duration::from_milli(1));
+		}
+
+		context.reset();
+		subtask->_result = Output{ subtask->_func(context) };
+	}
+
+	TripleTask(TaskFunc f)
+		: watcher{}
+		, subtasks{
+			SubTask(f, _cancellation_nop, this),
+			SubTask(f, _cancellation_nop, this),
+			SubTask(f, _cancellation_nop, this)
+		}
+			
+		, started{0}
+	{}
+
+};
+
+template<typename F>
+auto make_tmr_task(Arena* arena, DeadlineWatcher* supervisor, Duration sub_task_deadline, F&& func){
+	auto restore = arena->offset;
+	using TaskType = TripleTask<decltype(func(TaskContext{})), F, decltype(_cancellation_nop)>;
+
+	auto tmr = make<TaskType>(arena, func);
+	auto watcher = make_deadline_watcher(arena, 3);
+	if(!tmr || !watcher){
+		arena->offset = restore;
+		return (TaskType*)nullptr;
+	}
+
+	tmr->started.store(0);
+	tmr->watcher = watcher;
+
+	for(int i = 0; i < 3; i++){
+		auto subtask = &tmr->subtasks[i];
+
+		if(!init_raw_task(subtask->raw_task(), arena, 0, tmr->_subtask_wrapper, subtask)){
+			arena->offset = restore;
+			return (TaskType*)nullptr;
+		}
+
+		if(supervisor){
+			supervisor->watch(subtask->raw_task(), sub_task_deadline);
+		}
+	}
+
+	return tmr;
 }
 
 __attribute__((noinline)) static inline
 void entrypoint(){
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
 	task_arena = arena_from_buffer({&task_arena_memory[0], task_arena_size});
+
+	DeadlineWatcher* watcher = make_deadline_watcher(&task_arena, 32);
+	ensure(watcher, "Failed to create watcher");
+
+	make_tmr_task(&task_arena, watcher, Duration::from_milli(200), [](TaskContext ctx) -> Unit {
+		sleep_for(Duration::from_milli(100 * ctx.id()));
+		printf("Hello %d\r\n", ctx.id());
+		return {};
+	});
+
+	while(watcher->count()){
+		watcher->scan();
+		sleep_for(Duration::from_milli(1));
+	}
 
 	// #if defined(FT_SCHED_PLATFORM_STM32F411CEU6)
 	// 	for(int i = 5; i > 0; i --){
@@ -254,7 +348,7 @@ void entrypoint(){
 	// #endif
 
 
-	do_regular_conv();
+	// do_regular_conv();
 
 	fflush(stdout);
 	while(1){
