@@ -1,0 +1,32 @@
+{
+    "version": "0.0.0",
+    "projectName": "ft_sched",
+    "configurations": [
+        {
+            "name": "STlink launch",
+            "cwd": "${workspaceRoot}",
+            "type": "cortex-debug",
+            "executable": "${workspaceRoot}/src/stm32/build/stm32.elf",
+            "request": "launch",
+            "servertype": "stlink",
+            "device": "STM32F411CEU6",
+            "interface": "swd",
+            "serialNumber": "",
+            "runToEntryPoint": "main",
+            "v1": false,
+            
+
+            // "svdFile": "${config:STM32VSCodeExtension.cubeCLT.path}/STMicroelectronics_CMSIS_SVD/STM32F411CEU6.svd", // Include svd to watch device peripherals
+            "serverpath": "/home/marcos/st/stm32cubeclt_1.19.0/STLink-gdb-server/bin/ST-LINK_gdbserver",
+            "stm32cubeprogrammer": "/home/marcos/st/stm32cubeclt_1.19.0/STM32CubeProgrammer/bin",
+            "stlinkPath": "/home/marcos/st/stm32cubeclt_1.19.0/STLink-gdb-server/bin/ST-LINK_gdbserver",
+            "armToolchainPath": "/home/marcos/.local/share/arm-gnu-toolchain/bin",
+            "gdbPath":"/home/marcos/.local/share/arm-gnu-toolchain/bin/arm-none-eabi-gdb",            
+            "serverArgs": [
+                // "-m", "4M",
+            ],
+
+            // "preLaunchTask": "Build all", // configured in tasks.json
+        },
+    ]
+}

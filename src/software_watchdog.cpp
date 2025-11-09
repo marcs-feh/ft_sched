@@ -28,7 +28,7 @@ void swdg_timer_func(RawTask*){
 }
 
 void swdg_init(Duration n){
-	constexpr usize arena_size = 1000;
+	constexpr usize arena_size = 2000;
 
 	static Arena arena = {};
 	static bool initialized = false;

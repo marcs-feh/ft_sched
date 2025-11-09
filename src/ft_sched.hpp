@@ -201,7 +201,7 @@ struct RawTask {
 	}
 
 	[[nodiscard]]
-	bool attach_supervisor(DeadlineWatcher* watcher, Duration limit);
+	bool attach_supervisor(DeadlineWatcher* watcher, Duration limit, CALLER_LOCATION);
 
 	~RawTask(){}
 
@@ -360,8 +360,8 @@ struct BasicTask {
 	}
 
 	[[nodiscard]]
-	bool attach_supervisor(DeadlineWatcher* watcher, Duration limit){
-		return _task.attach_supervisor(watcher, limit);
+	bool attach_supervisor(DeadlineWatcher* watcher, Duration limit, CALLER_LOCATION){
+		return _task.attach_supervisor(watcher, limit, caller_location);
 	}
 
 	void cancel(CALLER_LOCATION){

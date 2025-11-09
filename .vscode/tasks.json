@@ -1,0 +1,22 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build all",
+            "options": {
+                "cwd": "${workspaceFolder}/src"
+            },
+            "group": "build",
+            "type": "shell",
+            "command": "lua",
+            "args": [
+                "build.lua",
+                "stm32blackpill",
+                "-flash:B55B5A1A00000000AD95F301",
+                "-verbose",
+                "-mode:release"
+            ]
+
+        },
+    ]
+}

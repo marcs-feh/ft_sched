@@ -96,7 +96,7 @@ Arena main_arena{};
 
 constexpr usize max_task_count = 10;
 constexpr usize average_stack_size = 200 * sizeof(usize);
-constexpr usize task_arena_size = (max_task_count * average_stack_size) + 1024;
+constexpr usize task_arena_size = (max_task_count * average_stack_size) + 4096;
 
 u8 task_arena_memory[task_arena_size];
 
@@ -113,7 +113,6 @@ void print_info(){
 	msg = buffer_printf(buf, "  Address Width:   %zu-bit", sizeof(void*) * 8); printf("%s\r\n", msg.data);
 	msg = buffer_printf(buf, "  Tick Frequency:  %tu Hz", tick_frequency()); printf("%s\r\n", msg.data);
 	msg = buffer_printf(buf, "  RawTask size:    %td", sizeof(RawTask)); printf("%s\r\n", msg.data);
-	// msg = buffer_printf(buf, "  WAV file size:   %td", sizeof(scattered_and_lost_wav_data)); printf("%s\r\n", msg.data);
 }
 
 static inline
@@ -309,7 +308,6 @@ struct TripleTask {
 			
 		, running{0}
 	{}
-
 };
 
 template<typename F> [[nodiscard]]
@@ -348,29 +346,17 @@ auto make_tmr_task(
 	return tmr;
 }
 
+template<typename ...Args>
+void log(cstring fmt, Args&& ...args){
+	Array<u8, 72> buf;
+	String res = buffer_printf(buf.slice(), fmt, forward<Args>(args)...);
+	puts(res.data);
+}
+
 static inline
 void entrypoint(){
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
 	task_arena = arena_from_buffer({&task_arena_memory[0], task_arena_size});
-
-	auto image = load_p5(image_pgm_data).unwrap();
-	bool running = true;
-
-	auto convolve_horizontal_input = make_spsc_queue<i32>(&main_arena, 8);
-
-	auto convolve_horizontal = [&running, convolve_horizontal_input, image](TaskContext ctx){
-		i32 row_idx = 0;
-		while(running){
-			if(!convolve_horizontal_input->pop_into(&row_idx)){
-				continue;
-			}
-
-			printf("RECV: %d\r\n", int(row_idx)); fflush(stdout);
-			sleep_for(Duration::from_milli(10));
-		}
-
-		return row_idx;
-	};
 
 	#if defined(FT_SCHED_PLATFORM_STM32F411CEU6)
 		for(int i = 4; i > 0; i --){
@@ -378,35 +364,73 @@ void entrypoint(){
 		}
 		print_info();
 	#endif
-		swdg_init(Duration::from_milli(10'000));
 
-		DeadlineWatcher* swdg_watcher = make_deadline_watcher(&task_arena, 32);
-		mem_copy(&swdg_watcher->name, "SWDG", sizeof(swdg_watcher->name) - 1);
+	auto image = load_p5(image_pgm_data).unwrap();
+	bool running = true;
 
-		ensure(swdg_watcher != nullptr, "Failed to create swdg_watcher");
-		[[maybe_unused]] auto watcher_task = make_basic_task(&task_arena, 512, [swdg_watcher](TaskContext){
-			while(1){
-				// printf("[swdg] Scan %d\r\n", int(swdg_watcher->count())); fflush(stdout);
-				auto ok = swdg_watcher->scan() && swdg_watcher->count();
-				if(ok){
-					swdg_reset();
-				}
+	auto t0 = make_basic_task(&task_arena, 2600, 0, [&running](TaskContext ctx){
+		while(running){
+			// printf("Task %d\r\n", int(ctx.id())); fflush(stdout);
+			sleep_for(Duration::from_milli(10));
+		}
+		return Unit{};
+	});
+	log("Arena: %zu\r\n", size_t(task_arena.offset));
+	auto t1 = make_basic_task(&task_arena, 2600, 0, [&running](TaskContext ctx){
+		while(running){
+			// printf("Task %d\r\n", int(ctx.id())); fflush(stdout);
+			sleep_for(Duration::from_milli(10));
+		}
+		return Unit{};
+	});
+	log("Arena: %zu\n", size_t(task_arena.offset));
+	auto t2 = make_basic_task(&task_arena, 2600, 0, [&running](TaskContext ctx){
+		while(running){
+			// printf("Task %d\r\n", int(ctx.id())); fflush(stdout);
+			sleep_for(Duration::from_milli(10));
+		}
+		return Unit{};
+	});
+	log("Arena: %zu\n", size_t(task_arena.offset));
 
-				sleep_for(Duration::from_milli(1));
-			}
+	auto t3 = make_basic_task(&task_arena, 2600, 0, [&running](TaskContext ctx){
+		while(running){
+			// printf("Task %d\r\n", int(ctx.id())); fflush(stdout);
+			sleep_for(Duration::from_milli(10));
+		}
+		return Unit{};
+	});
+	log("Arena: %zu\n", size_t(task_arena.offset));
 
-			return Unit{};
-		});
-	// #endif
 
-	auto horiz_task = make_basic_task(&task_arena, 2000, 0, convolve_horizontal);
-	horiz_task->attach_supervisor(swdg_watcher, Duration::from_milli(1'000));
+	// auto convolve_horizontal_input = make_spsc_queue<i32>(&main_arena, 8);
 
-	for(i32 i = 0; i < image.height; i += 1){
-		convolve_horizontal_input->push(i);
-	}
+	// auto horiz_task = make_basic_task(&task_arena, 2000, 0, [&running, convolve_horizontal_input, image](TaskContext ctx){
+	// 	i32 row_idx = 0;
+	// 	while(running){
+	// 		if(!convolve_horizontal_input->pop_into(&row_idx)){
+	// 			continue;
+	// 		}
 
-	horiz_task->join();
+	// 		printf("RECV: %d\r\n", int(row_idx)); fflush(stdout);
+	// 		sleep_for(Duration::from_milli(50));
+	// 	}
+
+	// 	return row_idx;
+	// });
+
+	// horiz_task->attach_supervisor(swdg_watcher, Duration::from_milli(1'000));
+
+	// RawTask* convolve_horizontal_progress_check = &horiz_task->_task;
+
+	// swdg_watcher->add(&convolve_horizontal_progress_check, [](void *ptr_ptr_task){
+	// 	auto t = *((RawTask**)ptr_ptr_task);
+	// 	t->cancel();
+	// }, Duration::from_milli(100));
+
+	// for(i32 i = 0; i < image.height; i += 1){
+	// 	convolve_horizontal_input->push(i);
+	// }
 
 	// DeadlineWatcher* watcher = make_deadline_watcher(&task_arena, 32);
 	// ensure(watcher, "Failed to create watcher");

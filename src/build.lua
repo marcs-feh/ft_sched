@@ -90,6 +90,8 @@ function execute_build(flash_serial, verbose)
 
 			'-I./stm32/Core/Inc',
 
+			'-I./stm32/Drivers/STM32F4xx_HAL_Driver/Inc',
+			'-I./stm32/Drivers/CMSIS/Device/ST/STM32F4xx/Include',
 			'-I./stm32/Drivers/CMSIS/Include',
 			'-I./stm32/Middlewares/Third_Party/FreeRTOS/Source/include',
 			'-I./stm32/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2',

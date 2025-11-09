@@ -16,9 +16,12 @@ void error_write(cstring msg){
 	fputs(msg, stderr);
 }
 
+extern "C" void HAL_NVIC_SystemReset();
+
 [[noreturn]]
 void trap(){
-	for(;;);
+	HAL_NVIC_SystemReset();
+	while(1);
 }
 
 //// FT_Sched platform specifics
@@ -68,8 +71,6 @@ bool RawTask::_platform_init(Arena* arena, usize stack_size, RawTaskFunc, void*)
 	StaticTask_t* tcb = make<StaticTask_t>(arena);
 	StackType_t* stack = (StackType_t*)arena->alloc(stack_size, portBYTE_ALIGNMENT);
 
-	printf("TASK SIZE: %d\r\n", int(sizeof(StaticTask_t)));
-
 	if(!name.data){
 		printf("Failed to allocate name\r\n");
 		return false;
@@ -99,7 +100,7 @@ bool RawTask::_platform_init(Arena* arena, usize stack_size, RawTaskFunc, void*)
 }
 
 bool RawTask::_platform_join(){
-	constexpr auto join_interval = Duration::from_milli(5);
+	constexpr auto join_interval = Duration::from_milli(25);
 
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 	TaskHandle_t handle = specific->handle.load();

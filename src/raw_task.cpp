@@ -53,10 +53,10 @@ void _raw_task_slot_cancellation(void* data){
 }
 
 [[nodiscard]]
-bool RawTask::attach_supervisor(DeadlineWatcher* watcher, Duration limit){
+bool RawTask::attach_supervisor(DeadlineWatcher* watcher, Duration limit, std::source_location const& caller_location){
 	auto ok = watcher->add((void*)this, _raw_task_slot_cancellation, limit);
 	if(ok){
-		ensure(this->supervisor == nullptr || this->supervisor == watcher, "Task already has a supervisor attached");
+		ensure((this->supervisor == nullptr) || (this->supervisor == watcher), "Task already has a supervisor attached", caller_location);
 		this->supervisor = watcher;
 	}
 	return ok;

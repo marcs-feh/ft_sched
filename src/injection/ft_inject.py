@@ -761,8 +761,8 @@ def main() -> None:
         symbols = conn.list_symbols()
         injector.list_source_files()
 
-        # conn.run_until_line('main.cpp', 132)
-        conn.resume()
+        conn.run_until_line('main.cpp', 370)
+        # conn.resume()
 
 
 if __name__ == "__main__":

@@ -1,0 +1,5 @@
+{
+"cortex-debug.stlinkPath": "/usr/bin/st-util",
+    "cortex-debug.gdbPath": "/home/marcos/.local/share/arm-gnu-toolchain/bin/arm-none-eabi-gdb",
+    "cmake.ignoreCMakeListsMissing": true
+}
