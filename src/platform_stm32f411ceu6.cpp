@@ -57,6 +57,11 @@ void _freertos_task_wrapper(void* task_ptr){
 	}
 }
 
+int RawTask::native_handle(){
+	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
+	return specific->handle.load(memory_order_relaxed);
+}
+
 bool RawTask::_platform_init(Arena* arena, usize stack_size, RawTaskFunc, void*){
 	if(_status.load() != TaskStatus_Initialized){
 		_status.store(TaskStatus_Fault);

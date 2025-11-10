@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <math.h>
+#include "FreeRTOS.h"
 
 #define FT_USE_CRC32
 
@@ -205,6 +206,115 @@ i32 consensus(Slice<u8> a, Slice<u8> b, Slice<u8> c){
 	return -1;
 }
 
+attribute_force_inline
+static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output){
+	auto begin = tick_now();
+	auto row_arena = main_arena.make_sub(350);
+	Duration line_time_acc = {0};
+
+	for(i32 row = 0; row < image.height; row += 1){
+		auto output_row = make_slice<u8>(row_arena, image.width);
+		i32 ok = 0;
+
+		Duration line_time = time_it([&](){
+			ok = sobel_row(image, row, output_row, row_arena);
+		});
+		line_time_acc = line_time_acc + line_time;
+
+		if(ok != image.width){
+			printf("Row error\r\n");
+		}
+		auto dest = output.pixel_data.skip(row * output.width).take(output.width);
+		copy(dest, output_row);
+		row_arena->offset = 0;
+	}
+
+	auto end = tick_now();
+	auto elapsed = tick_diff(end, begin);
+
+	return {int(elapsed.to_milli()), int(line_time_acc.to_milli() / image.height)};
+}
+
+attribute_force_inline
+static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
+	auto begin = tick_now();
+	auto row_arena = main_arena.make_sub(350 * 3);
+	Duration line_time_acc = {0};
+	Slice<u8> output_rows[3];
+
+    for(i32 row = 0; row < image.height; row += 1){
+        output_rows[0] = make_slice<u8>(row_arena, image.width);
+        output_rows[1] = make_slice<u8>(row_arena, image.width);
+        output_rows[2] = make_slice<u8>(row_arena, image.width);
+
+        ensure(output_rows[0].data && output_rows[1].data && output_rows[2].data, "Failed to allocate rows");
+
+        Duration line_time = time_it([&](){
+            sobel_row(image, row, output_rows[0], row_arena);
+            sobel_row(image, row, output_rows[1], row_arena);
+            sobel_row(image, row, output_rows[2], row_arena);
+        });
+
+        line_time_acc = line_time_acc + line_time;
+
+        auto dest = output.pixel_data.skip(row * output.width).take(output.width);
+
+        i32 cons = consensus(output_rows[0], output_rows[1], output_rows[2]);
+        ensure(cons >= 0, "No consensus reached");
+
+        if(output_rows[cons].len != image.width){
+            panic("Row error\r\n");
+        }
+        copy(dest, output_rows[cons]);
+        row_arena->offset = 0;
+    }
+
+	auto end = tick_now();
+	auto elapsed = tick_diff(end, begin);
+
+	return {int(elapsed.to_milli()), int(line_time_acc.to_milli() / image.height)};
+}
+
+attribute_force_inline
+static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
+	auto begin = tick_now();
+	auto row_arena = main_arena.make_sub(350 * 3);
+	Duration line_time_acc = {0};
+	Slice<u8> output_rows[3];
+
+	Atomic<i32> running_count = 0;
+	Atomic<bool> do_work = false;
+
+	Duration tmr0_time = {0};
+	i32 row = 0;
+
+	auto tmr0 = make_basic_task(&task_arena, 0, [&](TaskContext ctx){
+		while(1){
+			if(do_work.load()){
+				running_count.fetch_add(1);
+				sobel_row(image, row, output_rows[0], row_arena);
+			}
+
+			task_yield();
+		}
+
+		panic("Unreachable");
+		return Unit{};
+	});
+
+
+	auto end = tick_now();
+	auto elapsed = tick_diff(end, begin);
+	return {int(elapsed.to_milli()), int(line_time_acc.to_milli() / image.height)};
+}
+
+#define println(FMT, ...) do {\
+	printf(FMT "\r\n" __VA_OPT__(,) __VA_ARGS__); \
+	sleep_for(Duration::from_milli(2)); \
+} while(0)
+
+#define FT_EXAMPLE_REEXEC
+
 static inline
 void entrypoint(){
 	main_arena = arena_from_buffer({&main_arena_memory[0], main_arena_size});
@@ -227,80 +337,84 @@ void entrypoint(){
 
 	ensure(output.pixel_data.len == image.pixel_data.len, "Mismatched output");
 
-	printf("[Sobel Filter]\r\n");
-	auto begin = tick_now();
-	auto row_arena = main_arena.make_sub(350 * 3);
+	println("[Sobel Filter]\r\n");
 
-	Duration line_time_acc = {0};
+	#if defined(FT_EXAMPLE_SIMPLE)
+	auto _ = make_basic_task(&task_arena, [](TaskContext){ return Unit{}; });
 
-	Slice<u8> output_rows[3];
+	auto [total_time, time_per_row] = do_sobel_simple(image, output);
+	#elif defined(FT_EXAMPLE_REEXEC)
+	auto _ = make_basic_task(&task_arena, [](TaskContext){ return Unit{}; });
 
-	Atomic<bool> tmr0_running = false;
-	Duration tmr0_time = {0};
-	i32 row = 0;
-
-	auto tmr0 = make_basic_task(&task_arena, 0, [&](TaskContext ctx){
-		while(1){
-			if(tmr0_running.load()){
-				// printf("TMR0 Begin\r\n");
-				tmr0_time = time_it([&](){
-					sobel_row(image, row, output_rows[0], row_arena);
-				});
-
-				tmr0_running.store(false);
-				// printf("TMR0 End\r\n");
-			}
-
-			sleep_for(Duration::from_milli(10));
-		}
-		return Unit{};
-	});
-
-	// auto tmr1 = make_basic_task(&task_arena, 1500, 0, [](TaskContext ctx){
+	auto [total_time, time_per_row] = do_sobel_reexec(image, output);
+	#elif defined(FT_EXAMPLE_TMR)
+	#else
+	#error "No example selected"
+	#endif
+	// auto begin = tick_now();
+	// auto row_arena = main_arena.make_sub(350 * 3);
+	//
+	// Duration line_time_acc = {0};
+	//
+	// Slice<u8> output_rows[3];
+	//
+	// Atomic<bool> tmr0_running = false;
+	// Duration tmr0_time = {0};
+	// i32 row = 0;
+	//
+	// auto tmr0 = make_basic_task(&task_arena, 0, [&](TaskContext ctx){
+	// 	while(1){
+	// 		if(tmr0_running.load()){
+	// 			// printf("TMR0 Begin\r\n");
+	// 			tmr0_time = time_it([&](){
+	// 				sobel_row(image, row, output_rows[0], row_arena);
+	// 			});
+	//
+	// 			tmr0_running.store(false);
+	// 			// printf("TMR0 End\r\n");
+	// 		}
+	//
+	// 		sleep_for(Duration::from_milli(10));
+	// 	}
 	// 	return Unit{};
 	// });
-	// auto tmr2 = make_basic_task(&task_arena, 1500, 0, [](TaskContext ctx){
-	// 	return Unit{};
-	// });
+	//
+	// for(row = 0; row < image.height; row += 1){
+	// 	output_rows[0] = make_slice<u8>(row_arena, image.width);
+	// 	// output_rows[1] = make_slice<u8>(row_arena, image.width);
+	// 	// output_rows[2] = make_slice<u8>(row_arena, image.width);
+	// 	// ensure(output_rows[0].data && output_rows[1].data && output_rows[2].data, "Failed to allocate rows");
+	//
+	// 	if(!tmr0_running.load()){
+	// 		tmr0_running.store(true);
+	// 	}
+	//
+	// 	while(tmr0_running.load()){
+	// 		sleep_for(Duration::from_milli(10));
+	// 	}
+	//
+	// 	line_time_acc = line_time_acc + tmr0_time;
+	//
+	// 	auto dest = output.pixel_data.skip(row * output.width).take(output.width);
+	//
+	// 	// i32 cons = consensus(output_rows[0], output_rows[1], output_rows[2]);
+	// 	// ensure(cons >= 0, "No consensus reached");
+	//
+	// 	if(output_rows[0].len != image.width){
+	// 		panic("Row error\r\n");
+	// 	}
+	// 	copy(dest, output_rows[0]);
+	// 	row_arena->offset = 0;
+	// }
 
-	for(row = 0; row < image.height; row += 1){
-		output_rows[0] = make_slice<u8>(row_arena, image.width);
-		// output_rows[1] = make_slice<u8>(row_arena, image.width);
-		// output_rows[2] = make_slice<u8>(row_arena, image.width);
-		// ensure(output_rows[0].data && output_rows[1].data && output_rows[2].data, "Failed to allocate rows");
-
-		if(!tmr0_running.load()){
-			tmr0_running.store(true);
-		}
-
-		while(tmr0_running.load()){
-			sleep_for(Duration::from_milli(10));
-		}
-
-		line_time_acc = line_time_acc + tmr0_time;
-
-		auto dest = output.pixel_data.skip(row * output.width).take(output.width);
-
-		// i32 cons = consensus(output_rows[0], output_rows[1], output_rows[2]);
-		// ensure(cons >= 0, "No consensus reached");
-
-		if(output_rows[0].len != image.width){
-			panic("Row error\r\n");
-		}
-		copy(dest, output_rows[0]);
-		row_arena->offset = 0;
-	}
-
-	auto end = tick_now();
-	auto elapsed = tick_diff(end, begin);
-
-	printf("------------------\r\n"); fflush(stdout);
-	printf("Took: %dms\r\n", int(elapsed.to_milli())); sleep_for(Duration::from_milli(1));
-	printf("ms/row: %dms\r\n", int(line_time_acc.to_milli() / image.height)); sleep_for(Duration::from_milli(1));
-	printf("Task Arena: %dB\r\n", int(task_arena.peak_usage)); sleep_for(Duration::from_milli(1));
-	printf("Main Arena: %dB\r\n", int(main_arena.peak_usage)); sleep_for(Duration::from_milli(1));
-	printf("Image dimensions: %dx%d\r\n", int(image.width), int(image.height)); sleep_for(Duration::from_milli(1));
-	printf("------------------\r\n");fflush(stdout); sleep_for(Duration::from_milli(1));
+	println("------------------");
+	println("Took: %dms", total_time);
+	println("ms/row: %dms", time_per_row);
+	println("Task Arena: %dB", int(task_arena.peak_usage));
+	println("Main Arena: %dB", int(main_arena.peak_usage));
+	println("Image dimensions: %dx%d", int(image.width), int(image.height));
+	println("------------------");
+	fflush(stdout);
 
 	#if !defined(FT_SCHED_PLATFORM_STM32F411CEU6)
 	// dump_bitmap(output);

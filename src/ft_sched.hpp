@@ -200,6 +200,8 @@ struct RawTask {
 		arena->reset();
 	}
 
+	int native_handle();
+
 	[[nodiscard]]
 	bool attach_supervisor(DeadlineWatcher* watcher, Duration limit, CALLER_LOCATION);
 
