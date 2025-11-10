@@ -388,7 +388,7 @@ struct BasicTask {
 static_assert(Task<BasicTask<Unit, decltype(_task_nop), decltype(_cancellation_nop)>, Unit>, "BasicTask does not conform to Task concept");
 
 template<typename F>
-auto make_basic_task(Arena* parent, usize task_arena_size, usize stack_size, F&& func){
+auto make_basic_task(Arena* parent, usize task_arena_size, usize stack_size, F&& func, CALLER_LOCATION){
 	using TaskType = BasicTask<decltype(func(TaskContext{})), F, decltype(_cancellation_nop)>;
 	auto t = make<TaskType>(parent, forward<F>(func));
 	if(!t){
@@ -397,7 +397,7 @@ auto make_basic_task(Arena* parent, usize task_arena_size, usize stack_size, F&&
 	t->_task.on_cancel = t->_basic_task_cancel_wrapper;
 
 	if(!init_raw_task(&t->_task, parent, task_arena_size, stack_size, t->_basic_task_wrapper, t)){
-		return (TaskType*)nullptr;
+		panic("Failed to create task", caller_location);
 	}
 
 	return t;

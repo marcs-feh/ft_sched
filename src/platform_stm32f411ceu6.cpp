@@ -67,16 +67,20 @@ bool RawTask::_platform_init(Arena* arena, usize stack_size, RawTaskFunc, void*)
 
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 
+	// printf("NAME ALLOC\r\n");
 	auto name = arena_printf(arena, "T:%d", int(id));
+	// printf("TCB ALLOC\r\n");
 	StaticTask_t* tcb = make<StaticTask_t>(arena);
-	StackType_t* stack = (StackType_t*)arena->alloc(stack_size, portBYTE_ALIGNMENT);
+	// printf("STACK ALLOC\r\n");
+	StackType_t* stack = (StackType_t*)arena->alloc(stack_size + 16, portBYTE_ALIGNMENT * 4);
 
 	if(!name.data){
 		printf("Failed to allocate name\r\n");
 		return false;
 	}
+
 	if(!tcb){
-		printf("Failed to allocate TCB: (offset=%d, capacity=%d, size=%d)\r\n", int(arena->offset), int(arena->capacity), int(sizeof(tcb)));
+		printf("Failed to allocate TCB: (offset=%d, capacity=%d, size=%d)\r\n", int(arena->offset), int(arena->capacity), int(sizeof(*tcb)));
 		return false;
 	}
 
@@ -84,6 +88,7 @@ bool RawTask::_platform_init(Arena* arena, usize stack_size, RawTaskFunc, void*)
 		printf("Failed to allocate stack: (offset=%d, capacity=%d, size=%d)\r\n", int(arena->offset), int(arena->capacity), int(stack_size));
 		return false;
 	}
+
 	TaskHandle_t handle = xTaskCreateStatic(
 		_freertos_task_wrapper, /* Task body */
 		name.data, /* Name */

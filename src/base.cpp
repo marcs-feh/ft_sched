@@ -83,8 +83,8 @@ uintptr mem_align_forward_ptr(uintptr p, uintptr a){
 }
 
 //// Arena
-void Arena::reset(){
-	ensure(this->region_count == 0, "Arena has dangling regions");
+void Arena::reset(std::source_location const& caller_location){
+	ensure(this->region_count == 0, "Arena has dangling regions", caller_location);
 	this->offset = 0;
 	this->last_allocation = nullptr;
 }
@@ -116,6 +116,8 @@ void* Arena::alloc(usize size, usize align){
 	void* allocation = (void*)aligned;
 	this->last_allocation = allocation;
 	mem_zero(allocation, size);
+
+	this->peak_usage = max<u32>(this->offset, this->peak_usage);
 
 	return allocation;
 }
@@ -187,6 +189,7 @@ Arena arena_from_buffer(Slice<u8> buf){
 	a.capacity = buf.len;
 	a.last_allocation = nullptr;
 	a.region_count = 0;
+	a.peak_usage = 0;
 	return a;
 }
 

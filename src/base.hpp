@@ -610,6 +610,7 @@ struct Arena {
 	usize capacity;
 	void* last_allocation;
 	i32   region_count;
+	u32   peak_usage;
 
 	// Check if pointer is owned by arena
 	bool owns(void* p);
@@ -627,7 +628,7 @@ struct Arena {
 	Arena* make_sub(usize size);
 
 	// Reset arena, marking all allocations as free. This also ensures that there are not dangling regions.
-	void reset();
+	void reset(CALLER_LOCATION);
 };
 
 // Initialize an arena from a buffer

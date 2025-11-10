@@ -35,6 +35,10 @@ struct SystemStats {
 
 SystemStats sys_statistics;
 
+#if defined(FT_SCHED_PLATFORM_STM32F411CEU6)
+#include "FreeRTOS.h"
+#endif
+
 template<class T>
 void print_slice(Slice<T> slice, char const* elem_fmt){
 	u8 elem_buf[32];
@@ -48,14 +52,11 @@ void print_slice(Slice<T> slice, char const* elem_fmt){
 Arena task_arena{};
 Arena main_arena{};
 
-constexpr usize max_task_count = 10;
-constexpr usize average_stack_size = 200 * sizeof(usize);
-constexpr usize task_arena_size = (max_task_count * average_stack_size) + 4096;
+constexpr usize task_arena_size = 10 * 1024;
+alignas(64) u8 task_arena_memory[task_arena_size];
 
-u8 task_arena_memory[task_arena_size];
-
-constexpr usize main_arena_size = sizeof(image_pgm_data_storage) + 4096;
-u8 main_arena_memory[main_arena_size];
+constexpr usize main_arena_size = 8000;
+alignas(64) u8 main_arena_memory[main_arena_size];
 
 void print_info(){
 	static u8 bufdata[50];
@@ -143,19 +144,15 @@ void dump_bitmap(Bitmap const& bmap){
 }
 #endif
 
-template<typename ...Args>
-void log(cstring fmt, Args&& ...args){
-	Array<u8, 72> buf;
-	String res = buffer_printf(buf.slice(), fmt, forward<Args>(args)...);
-	printf("%s\r\n", res.data);
-}
-
-void sobel(Bitmap const& input, Bitmap& output){
-	ensure(input.width == output.width, "Mismatched width");
-	ensure(input.height == output.height, "Mismatched height");
+i32 sobel_row(Bitmap const& input, i32 row, Slice<u8> output, Arena* scratch){
+	ensure(input.width == output.len, "Mismatched width");
 	Convolution_Context<3> conv_horiz{};
+
+	auto region = arena_region_begin(scratch);
+	defer(arena_region_end(region));
+
 	conv_horiz.input = input;
-	conv_horiz.scratch = main_arena.make_sub(60);
+	conv_horiz.scratch = scratch;
 	conv_horiz.use_kernel(Array<i32, 9>{
 		-1000, -2000, -1000,
 		    0,     0,     0,
@@ -163,19 +160,47 @@ void sobel(Bitmap const& input, Bitmap& output){
 	} / splat<i32, 9>(4));
 
 	Convolution_Context<3> conv_vert = conv_horiz;
-	conv_vert.scratch = main_arena.make_sub(60);
+	conv_horiz.scratch = scratch;
 	conv_vert.use_kernel(Array<i32, 9>{
 		-1000, 0, +1000,
 		-2000, 0, +2000,
 		-1000, 0, +1000,
 	} / splat<i32, 9>(4));
 
-	for(i32 y = 0; y < input.height; y++){
-		for(i32 x = 0; x < input.width; x++){
-			i32 res = conv_horiz.get(x, y) + conv_vert.get(x, y);
-			output.pixel_data[(y * output.width) + x] = u8(clamp<i32>(0, res, 255));
+	i32 ok_count = 0;
+	for(i32 x = 0; x < input.width; x++){
+		i32 res = conv_horiz.get(x, row) + conv_vert.get(x, row);
+		if(res >= 0){
+			ok_count++;
 		}
+		output[x] = u8(clamp<i32>(0, res, 255));
 	}
+
+	return ok_count;
+}
+
+static u8 image_output_storage[sizeof(image_pgm_data_storage)];
+static auto image_output_data = Slice<u8>{&image_output_storage[0], sizeof(image_output_storage)};
+
+template<typename F>
+static inline
+Duration time_it(F&& f){
+	auto begin = tick_now();
+	f();
+	auto end = tick_now();
+	return tick_diff(end, begin);
+}
+
+i32 consensus(Slice<u8> a, Slice<u8> b, Slice<u8> c){
+	bool ab = a == b;
+	bool bc = b == c;
+	bool ca = c == a;
+
+	if(ab) return 0;
+	if(bc) return 1;
+	if(ca) return 2;
+
+	return -1;
 }
 
 static inline
@@ -184,31 +209,68 @@ void entrypoint(){
 	task_arena = arena_from_buffer({&task_arena_memory[0], task_arena_size});
 
 	#if defined(FT_SCHED_PLATFORM_STM32F411CEU6)
-		for(int i = 4; i > 0; i --){
+		for(int i = 3; i > 0; i --){
 			sleep_for(Duration::from_milli(1'000)); printf("%d\r\n", i); fflush(stdout);
 		}
 		print_info();
 	#endif
 
 	auto image = load_p5(image_pgm_data).unwrap();
-	bool running = true;
+	auto copy_time = time_it([](){
+		copy(image_output_data, image_pgm_data);
+	});
+	auto output = load_p5(image_output_data).unwrap();
 
-	auto output = image.copy(&main_arena).unwrap();
-	ensure(output.pixel_data.len, "HUH?");
+	// printf("Loaded image: %dms\r\n", (int)copy_time.to_milli());
 
+	ensure(output.pixel_data.len == image.pixel_data.len, "Mismatched output");
 
-	log("[Sobel Filter]");
+	printf("[Sobel Filter]\r\n");
 	auto begin = tick_now();
+	auto row_arena = main_arena.make_sub(350);
 
-	sobel(image, output);
+	Duration line_time_acc = {0};
+
+	auto x = make_basic_task(&task_arena, 1500, 0, [](TaskContext ctx){
+		return Unit{};
+	});
+	auto y = make_basic_task(&task_arena, 1500, 0, [](TaskContext ctx){
+		return Unit{};
+	});
+	auto z = make_basic_task(&task_arena, 1500, 0, [](TaskContext ctx){
+		return Unit{};
+	});
+
+	for(i32 row = 0; row < image.height; row += 1){
+		auto output_row = make_slice<u8>(row_arena, image.width);
+		i32 ok = 0;
+
+		Duration line_time = time_it([&](){
+			ok = sobel_row(image, row, output_row, row_arena);
+		});
+		line_time_acc = line_time_acc + line_time;
+
+		if(ok != image.width){
+			printf("Row error\r\n");
+		}
+		auto dest = output.pixel_data.skip(row * output.width).take(output.width);
+		copy(dest, output_row);
+		row_arena->offset = 0;
+	}
 
 	auto end = tick_now();
 	auto elapsed = tick_diff(end, begin);
-	log("Took: %tdms", elapsed.to_milli());
-	log("------------------");
+
+	printf("------------------\r\n");
+	printf("Took: %dms\r\n", int(elapsed.to_milli()));
+	printf("ms/row: %dms\r\n", int(line_time_acc.to_milli() / image.height));
+	printf("Task Arena: %dB\r\n", int(task_arena.peak_usage));
+	printf("Main Arena: %dB\r\n", int(main_arena.peak_usage));
+	printf("Image dimensions: %dx%d\r\n", int(image.width), int(image.height));
+	printf("------------------\r\n");fflush(stdout);
 
 	#if !defined(FT_SCHED_PLATFORM_STM32F411CEU6)
-	dump_bitmap(output);
+	// dump_bitmap(output);
 	#endif
 
 

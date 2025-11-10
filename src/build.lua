@@ -65,6 +65,7 @@ function execute_build(flash_serial, verbose)
 
 	if platform == 'linux' then
 		cflags[#cflags+1] = '-fPIC'
+		cflags[#cflags+1] = '-fsanitize=address'
 		cflags[#cflags+1] = '-DFT_SCHED_PLATFORM_LINUX'
 	elseif platform == 'windows' then
 		cflags[#cflags+1] = '-D_CRT_SECURE_NO_WARNINGS'
