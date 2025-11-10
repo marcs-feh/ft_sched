@@ -306,24 +306,26 @@ void save_p5(Bitmap const& bmp, IO_Writer w){
 }
 
 template<unsigned int N>
-struct CRC32<Array<f32, N>>{
-	u32 get(Array<f32, N> const& arr){
-		Array<u8, N * sizeof(f32)> buf;
+struct CRC32<Array<i32, N>>{
+	u32 get(Array<i32, N> const& arr){
+		Array<u8, N * sizeof(i32)> buf;
 
-		mem_copy(&buf._v[0], &arr._v[0], N * sizeof(f32));
+		mem_copy(&buf._v[0], &arr._v[0], N * sizeof(i32));
 
 		return CRC32<Slice<u8>>{}.get(buf.slice());
 	}
 };
 
+constexpr u32 scale_factor = 1000;
+
 template<int N>
 struct Convolution_Context{
-	Array<f32, N * N> _kernel;
+	Array<i32, N * N> _kernel;
 	volatile u32 _kernel_check_value;
 	Bitmap input;
 	Arena* scratch;
 
-	static_assert(CRC32_Checkable<Array<f32, N * N>>, "Not checkable");
+	static_assert(CRC32_Checkable<Array<i32, N * N>>, "Not checkable");
 
 	Rect rect_of(i32 x, i32 y){
 		return {
@@ -334,9 +336,9 @@ struct Convolution_Context{
 		};
 	}
 
-	void use_kernel(Array<f32, N * N> const& k){
+	void use_kernel(Array<i32, N * N> const& k){
 		_kernel = k;
-		_kernel_check_value = CRC32<Array<f32, N * N>>{}.get(k);
+		_kernel_check_value = CRC32<Array<i32, N * N>>{}.get(k);
 	}
 
 	Option<i32> get(i32 x, i32 y){
@@ -358,22 +360,22 @@ struct Convolution_Context{
 			return 0;
 		}
 		auto data = region.unwrap().pixel_data;
-		Array<f32, N * N> norm_data;
+		Array<i32, N * N> mul_data;
 
 		ensure(data.len == (N*N), "Mismatched lengths");
-
 		for(usize i = 0; i < data.len; i += 1){
-			norm_data[i] = f32(data[i]) / 255.0f;
+			mul_data[i] = data[i];
 		}
 
-		auto res = norm_data * _kernel;
-		f32 acc = 0;
+		auto res = (mul_data * _kernel) / splat<i32, N*N>(1'000);
+		i32 acc = 0;
 		for(usize i = 0; i < (N * N); i += 1){
 			acc += res[i];
 		}
 
 		scratch->reset();
-		return i32(clamp<f32>(0, acc * 255, 255));
+		// printf("RES:%d\r\n"); fflush(stdout);
+		return i32(clamp<i32>(0, acc, 255));
 	}
 
 	Convolution_Context()

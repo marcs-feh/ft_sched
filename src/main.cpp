@@ -7,6 +7,8 @@
 
 #include "image.cpp"
 
+#include "lena.pgm.cpp"
+
 struct SystemStats {
 	Atomic<i32> failed_assertions = 0;
 	Atomic<i32> crc_failures = 0;
@@ -51,7 +53,7 @@ constexpr usize task_arena_size = (max_task_count * average_stack_size) + 4096;
 
 u8 task_arena_memory[task_arena_size];
 
-constexpr usize main_arena_size = 40 * 1024;
+constexpr usize main_arena_size = sizeof(image_pgm_data_storage) + 4096;
 u8 main_arena_memory[main_arena_size];
 
 void print_info(){
@@ -140,8 +142,6 @@ void dump_bitmap(Bitmap const& bmap){
 }
 #endif
 
-#include "lena.pgm.cpp"
-
 auto lena_image = load_p5(image_pgm_data).unwrap();
 
 struct Point {
@@ -150,26 +150,30 @@ struct Point {
 };
 
 void convolve_sobel_worker(SPSC_Queue<Point>* input, SPSC_Queue<i32>* output){
+	printf("BEGIN SOBEL\r\n"); fflush(stdout);
 	Convolution_Context<3> conv_horiz{};
 	conv_horiz.input = lena_image;
-	conv_horiz.scratch = main_arena.make_sub(100);
-	conv_horiz.use_kernel(Array<f32, 9>{
-		-1.0f, -2.0f, -1.0f,
-		0.0f, 0.0f, 0.0f,
-		+1.0f, +2.0f, +1.0f,
-	} / splat<f32, 9>(4.0f));
+	conv_horiz.scratch = main_arena.make_sub(60);
+	conv_horiz.use_kernel(Array<i32, 9>{
+		-1000, -2000, -1000,
+		    0,     0,     0,
+		+1000, +2000, +1000,
+	} / splat<i32, 9>(4));
 
 	Convolution_Context<3> conv_vert = conv_horiz;
-	conv_vert.scratch = main_arena.make_sub(100);
-	conv_vert.use_kernel(Array<f32, 9>{
-		-1.0f, 0.0f, +1.0f,
-		-2.0f, 0.0f, +2.0f,
-		-1.0f, 0.0f, +1.0f,
-	} / splat<f32, 9>(4.0f));
+	conv_vert.scratch = main_arena.make_sub(60);
+	conv_vert.use_kernel(Array<i32, 9>{
+		-1000, 0, +1000,
+		-2000, 0, +2000,
+		-1000, 0, +1000,
+	} / splat<i32, 9>(4));
 
 	while(true){
-		Point p = {0, 0};
+		printf("ENTER\r\n"); 
+	
+		Point p = {};
 		if(!input->pop_into(&p)){
+			printf("POP\r\n"); 
 			continue;
 		}
 		if(p.x < -999){ break; }
@@ -179,9 +183,11 @@ void convolve_sobel_worker(SPSC_Queue<Point>* input, SPSC_Queue<i32>* output){
 
 		if(vv && hv){
 			i32 r = clamp<i32>(0, hv.unwrap() + vv.unwrap(), 255);
-			// printf("SEND: %d\n", r); fflush(stdout);
+			printf("SEND: %d\r\n", i32(r)); fflush(stdout);
 			output->push(r);
 		}
+
+		sleep_for(Duration::from_milli(1));
 	}
 }
 
@@ -204,10 +210,10 @@ void entrypoint(){
 		print_info();
 	#endif
 
-	auto image = load_p5(image_pgm_data).unwrap("Failed to load image");
+	auto image = load_p5(image_pgm_data).unwrap();
 	bool running = true;
 
-	auto output = lena_image.copy(&main_arena).unwrap("Failed to create output");
+	auto output = lena_image.copy(&main_arena).unwrap();
 	ensure(output.pixel_data.len, "HUH?");
 
 	auto sobel_input = make_spsc_queue<Point>(&main_arena, 4);
@@ -217,28 +223,40 @@ void entrypoint(){
 		convolve_sobel_worker(sobel_input, sobel_output);
 		return Unit{};
 	});
-
-	auto begin = tick_now();
 	for(i32 y = 0; y < lena_image.height; y++){
 		for(i32 x = 0; x < lena_image.width; x++){
-			sobel_input->push(Point{x, y});
-
-			i32 res = -1;
-			while(!sobel_output->pop_into(&res)){
-			}
-
-			if(res < 0){
-				panic("Failed to get pixel");
-			}
-			output.pixel_data[(y * output.width) + x] = res;
+			sobel_input->try_push(Point{x, y});
+			sleep_for(Duration::from_milli(10));
 		}
 	}
-	sobel_input->push(Point{-1000, -1000});
+	sobel_task->join();
 
-	auto end = tick_now();
-	auto elapsed = tick_diff(end, begin);
-	log("Took: %tdms", elapsed.to_milli());
+
+	// auto begin = tick_now();
+	// for(i32 y = 0; y < lena_image.height; y++){
+	// 	printf("ROW: %d\r\n", int(y)); fflush(stdout);
+
+	// 	for(i32 x = 0; x < lena_image.width; x++){
+	// 		sobel_input->push(Point{x, y});
+
+	// 		i32 res = -1;
+	// 		while(!sobel_output->pop_into(&res)){}
+
+	// 		if(res < 0){
+	// 			panic("Failed to get pixel");
+	// 		}
+	// 		output.pixel_data[(y * output.width) + x] = res;
+	// 	}
+	// }
+	// sobel_input->push(Point{-1000, -1000});
+
+	// auto end = tick_now();
+	// auto elapsed = tick_diff(end, begin);
+	// log("Took: %tdms", elapsed.to_milli());
+
+	#if !defined(FT_SCHED_PLATFORM_STM32F411CEU6)
 	dump_bitmap(output);
+	#endif
 
 
 	fflush(stdout);
@@ -246,6 +264,7 @@ void entrypoint(){
 
 	#if defined(FT_SCHED_PLATFORM_STM32F411CEU6)
 	while(1){
+		task_yield();
 	}
 	#endif
 }

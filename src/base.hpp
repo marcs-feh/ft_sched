@@ -409,6 +409,67 @@ Array<T, N> splat(T value){
 	return res;
 }
 
+//// Strings
+struct Arena;
+struct String {
+	char const* data;
+	usize len;
+
+	String slice(){
+		return *this;
+	}
+
+	String slice(usize start, usize end) {
+		ensure(end <= this->len && end >= start, "Invalid string indices");
+		return String{ &this->data[start], end - start };
+	}
+
+	String take(usize count) {
+		ensure(count <= this->len, "Cannot take more than string length");
+		return String{ this->data, count };
+	}
+
+	String skip(usize count) {
+		ensure(count <= this->len, "Cannot skip more than string length");
+		return String{ &this->data[count], this->len - count };
+	}
+
+	Slice<u8> raw_bytes(){
+		return Slice<u8>{(u8*)data, len};
+	}
+
+	String clone(Arena* arena);
+
+	isize find(String sub, usize offset);
+
+	u8 operator[](usize idx) const {
+		ensure(idx < len, "Out of bounds access");
+		return data[idx];
+	}
+
+	bool operator==(String s) const {
+		return !(*this != s);
+	}
+
+	bool operator!=(String s) const {
+		if(len != s.len){ return true; }
+
+		for(usize i = 0; i < len; i += 1){
+			if(data[i] != s.data[i]){ return true; }
+		}
+
+		return false;
+	}
+
+	String() : data{0}, len{0} {}
+
+	String(cstring cs) : data{cs}, len{cstring_len(cs)} {}
+
+	String(char const* p, usize n) : data{p}, len{n} {}
+
+	explicit String(Slice<u8> s) : data{(char const*)s.data}, len{s.len} {}
+};
+
 
 //// Option
 template<typename T>
@@ -421,19 +482,17 @@ struct Option {
 
 	attribute_force_inline constexpr auto ok() const { return _has_value; }
 
-	[[nodiscard]] constexpr
-	T unwrap(cstring msg = "", CALLER_LOCATION){
+	[[nodiscard]]
+	T unwrap(CALLER_LOCATION){
 		if(!_has_value){
-			Array<u8, 72> buf;
-			auto s = buffer_printf(buf.slice(), "(%s:%d) bad unwrap(): %s", caller_location.file_name(), caller_location.line(), msg);
-			panic(s.data);
+			panic("Empty unwrap()", caller_location);
 		}
 		auto v = ::move(_value);
 		drop();
 		return v;
 	}
 
-	[[nodiscard]] constexpr
+	[[nodiscard]]
 	T unwrap_unchecked(){
 		auto v = ::move(_value);
 		drop();
@@ -749,66 +808,6 @@ template<class T> [[nodiscard]]
 List<T> make_list(Arena* a){
 	return List<T>{nullptr, 0, 0, a};
 }
-
-//// Strings
-struct String {
-	char const* data;
-	usize len;
-
-	String slice(){
-		return *this;
-	}
-
-	String slice(usize start, usize end) {
-		ensure(end <= this->len && end >= start, "Invalid string indices");
-		return String{ &this->data[start], end - start };
-	}
-
-	String take(usize count) {
-		ensure(count <= this->len, "Cannot take more than string length");
-		return String{ this->data, count };
-	}
-
-	String skip(usize count) {
-		ensure(count <= this->len, "Cannot skip more than string length");
-		return String{ &this->data[count], this->len - count };
-	}
-
-	Slice<u8> raw_bytes(){
-		return Slice<u8>{(u8*)data, len};
-	}
-
-	String clone(Arena* arena);
-
-	isize find(String sub, usize offset);
-
-	u8 operator[](usize idx) const {
-		ensure(idx < len, "Out of bounds access");
-		return data[idx];
-	}
-
-	bool operator==(String s) const {
-		return !(*this != s);
-	}
-
-	bool operator!=(String s) const {
-		if(len != s.len){ return true; }
-
-		for(usize i = 0; i < len; i += 1){
-			if(data[i] != s.data[i]){ return true; }
-		}
-
-		return false;
-	}
-
-	String() : data{0}, len{0} {}
-
-	String(cstring cs) : data{cs}, len{cstring_len(cs)} {}
-
-	String(char const* p, usize n) : data{p}, len{n} {}
-
-	explicit String(Slice<u8> s) : data{(char const*)s.data}, len{s.len} {}
-};
 
 // String str_repeat(String str, usize count, Arena* a){
 // 	String res = {0};
