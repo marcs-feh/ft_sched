@@ -1,7 +1,5 @@
 #include "base.hpp"
 
-constexpr bool enable_crc_checks = false;
-
 template<typename T, typename F>
 Option<usize> linear_search(Slice<T> s, F&& predicate){
 	for(usize i = 0; i < s.len; i += 1){
@@ -341,17 +339,18 @@ struct Convolution_Context{
 		_kernel_check_value = CRC32<Array<i32, N * N>>{}.get(k);
 	}
 
-	Option<i32> get(i32 x, i32 y){
-		if constexpr(enable_crc_checks) {
+	i32 get(i32 x, i32 y){
+		#if defined(FT_USE_CRC32)
 			COMPILER_MEMORY_BARRIER();
 			if(_kernel_check_value != crc32(_kernel)){
 				return {};
 			}
 			COMPILER_MEMORY_BARRIER();
-		}
+		#endif
 
 		if(u32(x) >= u32(input.width) || u32(y) >= u32(input.height)){
-			return {};
+			panic("Out of bounds get()");
+			return 0;
 		}
 
 		auto r = rect_of(x, y);

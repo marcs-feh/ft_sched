@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <math.h>
 
+#define FT_USE_CRC32
+
 #include "base.hpp"
 
 #include "ft_sched.hpp"
@@ -26,7 +28,6 @@ struct SystemStats {
 			"total_arena_space: %d\r\n"
 			, int(failed_assertions.load()), int(crc_failures.load()), int(total_stack_space.load()), int(total_arena_space.load()));
 
-		fflush(stdout);
 		printf("%s\r\n", res.data);
 		fflush(stdout);
 	}
@@ -142,17 +143,18 @@ void dump_bitmap(Bitmap const& bmap){
 }
 #endif
 
-auto lena_image = load_p5(image_pgm_data).unwrap();
+template<typename ...Args>
+void log(cstring fmt, Args&& ...args){
+	Array<u8, 72> buf;
+	String res = buffer_printf(buf.slice(), fmt, forward<Args>(args)...);
+	printf("%s\r\n", res.data);
+}
 
-struct Point {
-	i32 x;
-	i32 y;
-};
-
-void convolve_sobel_worker(SPSC_Queue<Point>* input, SPSC_Queue<i32>* output){
-	printf("BEGIN SOBEL\r\n"); fflush(stdout);
+void sobel(Bitmap const& input, Bitmap& output){
+	ensure(input.width == output.width, "Mismatched width");
+	ensure(input.height == output.height, "Mismatched height");
 	Convolution_Context<3> conv_horiz{};
-	conv_horiz.input = lena_image;
+	conv_horiz.input = input;
 	conv_horiz.scratch = main_arena.make_sub(60);
 	conv_horiz.use_kernel(Array<i32, 9>{
 		-1000, -2000, -1000,
@@ -168,34 +170,12 @@ void convolve_sobel_worker(SPSC_Queue<Point>* input, SPSC_Queue<i32>* output){
 		-1000, 0, +1000,
 	} / splat<i32, 9>(4));
 
-	while(true){
-		printf("ENTER\r\n"); 
-	
-		Point p = {};
-		if(!input->pop_into(&p)){
-			printf("POP\r\n"); 
-			continue;
+	for(i32 y = 0; y < input.height; y++){
+		for(i32 x = 0; x < input.width; x++){
+			i32 res = conv_horiz.get(x, y) + conv_vert.get(x, y);
+			output.pixel_data[(y * output.width) + x] = u8(clamp<i32>(0, res, 255));
 		}
-		if(p.x < -999){ break; }
-
-		auto hv = conv_horiz.get(p.x, p.y);
-		auto vv = conv_vert.get(p.x, p.y);
-
-		if(vv && hv){
-			i32 r = clamp<i32>(0, hv.unwrap() + vv.unwrap(), 255);
-			printf("SEND: %d\r\n", i32(r)); fflush(stdout);
-			output->push(r);
-		}
-
-		sleep_for(Duration::from_milli(1));
 	}
-}
-
-template<typename ...Args>
-void log(cstring fmt, Args&& ...args){
-	Array<u8, 72> buf;
-	String res = buffer_printf(buf.slice(), fmt, forward<Args>(args)...);
-	puts(res.data);
 }
 
 static inline
@@ -213,58 +193,27 @@ void entrypoint(){
 	auto image = load_p5(image_pgm_data).unwrap();
 	bool running = true;
 
-	auto output = lena_image.copy(&main_arena).unwrap();
+	auto output = image.copy(&main_arena).unwrap();
 	ensure(output.pixel_data.len, "HUH?");
 
-	auto sobel_input = make_spsc_queue<Point>(&main_arena, 4);
-	auto sobel_output = make_spsc_queue<i32>(&main_arena, 50);
 
-	auto sobel_task = make_basic_task(&task_arena, 1800, [sobel_input, sobel_output](TaskContext ctx) {
-		convolve_sobel_worker(sobel_input, sobel_output);
-		return Unit{};
-	});
-	for(i32 y = 0; y < lena_image.height; y++){
-		for(i32 x = 0; x < lena_image.width; x++){
-			sobel_input->try_push(Point{x, y});
-			sleep_for(Duration::from_milli(10));
-		}
-	}
-	sobel_task->join();
+	log("[Sobel Filter]");
+	auto begin = tick_now();
 
+	sobel(image, output);
 
-	// auto begin = tick_now();
-	// for(i32 y = 0; y < lena_image.height; y++){
-	// 	printf("ROW: %d\r\n", int(y)); fflush(stdout);
-
-	// 	for(i32 x = 0; x < lena_image.width; x++){
-	// 		sobel_input->push(Point{x, y});
-
-	// 		i32 res = -1;
-	// 		while(!sobel_output->pop_into(&res)){}
-
-	// 		if(res < 0){
-	// 			panic("Failed to get pixel");
-	// 		}
-	// 		output.pixel_data[(y * output.width) + x] = res;
-	// 	}
-	// }
-	// sobel_input->push(Point{-1000, -1000});
-
-	// auto end = tick_now();
-	// auto elapsed = tick_diff(end, begin);
-	// log("Took: %tdms", elapsed.to_milli());
+	auto end = tick_now();
+	auto elapsed = tick_diff(end, begin);
+	log("Took: %tdms", elapsed.to_milli());
+	log("------------------");
 
 	#if !defined(FT_SCHED_PLATFORM_STM32F411CEU6)
 	dump_bitmap(output);
 	#endif
 
 
-	fflush(stdout);
-	printf("------------------\r\n");
-
 	#if defined(FT_SCHED_PLATFORM_STM32F411CEU6)
 	while(1){
-		task_yield();
 	}
 	#endif
 }
