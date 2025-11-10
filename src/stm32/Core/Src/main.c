@@ -48,7 +48,7 @@
 osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
   .name = "defaultTask",
-  .stack_size = 128 * 4,
+  .stack_size = 1500 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
@@ -85,6 +85,18 @@ int _write(int file, char *ptr, int len) {
     } while (result == USBD_BUSY);
 
     return len;
+}
+
+void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName) {
+	volatile UBaseType_t stackHighWaterMark = uxTaskGetStackHighWaterMark(defaultTaskHandle);
+
+    while(1);
+}
+
+void vApplicationMallocFailedHook(void) {
+	volatile UBaseType_t stackHighWaterMark = uxTaskGetStackHighWaterMark(defaultTaskHandle);
+
+    while(1);
 }
 /* USER CODE END 0 */
 

@@ -212,9 +212,9 @@ struct RawTask {
 
 u32 next_raw_task_id();
 
-bool init_raw_task(RawTask* task, Arena* parent, usize sub_arena_size, usize stack_size, RawTaskFunc func, void* args);
+bool init_raw_task(RawTask* task, Arena* parent, usize stack_size, RawTaskFunc func, void* args);
 
-RawTask* make_raw_task(Arena* parent, usize sub_arena_size, usize stack_size, RawTaskFunc func, void* args);
+RawTask* make_raw_task(Arena* parent, usize stack_size, RawTaskFunc func, void* args);
 
 
 template<typename Impl, typename T>
@@ -388,7 +388,7 @@ struct BasicTask {
 static_assert(Task<BasicTask<Unit, decltype(_task_nop), decltype(_cancellation_nop)>, Unit>, "BasicTask does not conform to Task concept");
 
 template<typename F>
-auto make_basic_task(Arena* parent, usize task_arena_size, usize stack_size, F&& func, CALLER_LOCATION){
+auto make_basic_task(Arena* parent, usize stack_size, F&& func, CALLER_LOCATION){
 	using TaskType = BasicTask<decltype(func(TaskContext{})), F, decltype(_cancellation_nop)>;
 	auto t = make<TaskType>(parent, forward<F>(func));
 	if(!t){
@@ -396,7 +396,7 @@ auto make_basic_task(Arena* parent, usize task_arena_size, usize stack_size, F&&
 	}
 	t->_task.on_cancel = t->_basic_task_cancel_wrapper;
 
-	if(!init_raw_task(&t->_task, parent, task_arena_size, stack_size, t->_basic_task_wrapper, t)){
+	if(!init_raw_task(&t->_task, parent, stack_size, t->_basic_task_wrapper, t)){
 		panic("Failed to create task", caller_location);
 	}
 
@@ -404,8 +404,8 @@ auto make_basic_task(Arena* parent, usize task_arena_size, usize stack_size, F&&
 }
 
 template<typename F>
-auto make_basic_task(Arena* parent, usize task_arena_size, F&& func){
-	return make_basic_task(parent, task_arena_size, 0, forward<F>(func));
+auto make_basic_task(Arena* parent, F&& func){
+	return make_basic_task(parent, 0, forward<F>(func));
 }
 
 //// Software watchdog timer

@@ -190,7 +190,7 @@ struct DeferredCall {
 };
 
 template<typename F> attribute_force_inline
-auto make_deferred(F&& f){
+static inline auto make_deferred(F&& f){
 	return DeferredCall<F>(forward<F>(f));
 }
 

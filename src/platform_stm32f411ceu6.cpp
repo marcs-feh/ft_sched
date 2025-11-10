@@ -76,28 +76,30 @@ bool RawTask::_platform_init(Arena* arena, usize stack_size, RawTaskFunc, void*)
 
 	if(!name.data){
 		printf("Failed to allocate name\r\n");
-		return false;
+		panic("Fatal error in task creation");
 	}
 
 	if(!tcb){
 		printf("Failed to allocate TCB: (offset=%d, capacity=%d, size=%d)\r\n", int(arena->offset), int(arena->capacity), int(sizeof(*tcb)));
-		return false;
+		panic("Fatal error in task creation");
 	}
 
 	if(!stack){
 		printf("Failed to allocate stack: (offset=%d, capacity=%d, size=%d)\r\n", int(arena->offset), int(arena->capacity), int(stack_size));
-		return false;
+		panic("Fatal error in task creation");
 	}
 
+	auto actual_stack_size = stack_size / sizeof(StackType_t);
 	TaskHandle_t handle = xTaskCreateStatic(
 		_freertos_task_wrapper, /* Task body */
 		name.data, /* Name */
-		stack_size / sizeof(StackType_t), /* Stack size */
+		actual_stack_size, /* Stack size */
 		(void*)this, /* Task Parameter */
 		osPriorityNormal, /* Priority */
 		stack, /* Stack data */
 		tcb /* TCB data */
 	);
+	ensure(handle != NULL, "Failed to create task");
 
 	specific->handle.store(handle);
 
