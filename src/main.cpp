@@ -7,7 +7,7 @@
 #endif
 
 #define FT_EXAMPLE_REEXEC
-// #define FT_USE_CRC
+#define FT_USE_CRC
 
 #include "base.hpp"
 
@@ -43,7 +43,7 @@ SystemStats sys_statistics;
 
 #define println(FMT, ...) do {\
 	printf(FMT "\r\n" __VA_OPT__(,) __VA_ARGS__); \
-	sleep_for(Duration::from_milli(2)); \
+	sleep_for(Duration::from_milli(1)); \
 } while(0)
 
 template<class T>
@@ -229,11 +229,11 @@ bool crc_row_check(Bitmap bmp, Slice<u32> row_crcs){
 
 		volatile u32 check = crc32(bmp_row);
 		if(row_crcs[row] != check){
-			row_crcs[row] = 1;
+			row_crcs[row] = 0;
 			ok = false;
 		}
 		else {
-			row_crcs[row] = 0;
+			row_crcs[row] = 1;
 		}
 
 		COMPILER_MEMORY_BARRIER();
@@ -247,11 +247,11 @@ static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output){
 	auto begin = tick_now();
 	auto row_arena = main_arena.make_sub(350);
 	Duration line_time_acc = {0};
+
 	#ifdef FT_USE_CRC
 	auto row_crcs = make_slice<u32>(&main_arena, image.height);
 	ensure(row_crcs.data, "Failed to allocate CRC space");
 	#endif
-
 
 	for(i32 row = 0; row < image.height; row += 1){
 		auto output_row = make_slice<u8>(row_arena, image.width);
@@ -289,15 +289,28 @@ static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output){
 	COMPILER_MEMORY_BARRIER();
 
 	#ifdef FT_USE_CRC
-	COMPILER_MEMORY_BARRIER();
 	println("[CRC Output check]");
 	if(!crc_row_check(output, row_crcs)){
-		auto end = tick_now();
-		auto elapsed = tick_diff(end, begin);
-		println("ERROR: Corrupt output");
-		return {int(elapsed.to_milli()), int(line_time_acc.to_milli() / image.height)};
+		for(i32 row = 0; row < image.height; row += 1){
+			if(row_crcs[row]){ continue; }
+			println("[RECOMPUTE: %d]", row);
+
+			auto output_row = make_slice<u8>(row_arena, image.width);
+			i32 ok = 0;
+
+			Duration line_time = time_it([&](){
+				ok = sobel_row(image, row, output_row, row_arena);
+			});
+			line_time_acc = line_time_acc + line_time;
+
+			if(ok != image.width){
+				printf("Row error\r\n");
+			}
+			auto dest = output.pixel_data.skip(row * output.width).take(output.width);
+			copy(dest, output_row);
+			row_arena->offset = 0;
+		}
 	}
-	COMPILER_MEMORY_BARRIER();
 	#endif
 
 	auto end = tick_now();
@@ -322,15 +335,12 @@ static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
         output_rows[1] = make_slice<u8>(row_arena, image.width);
         output_rows[2] = make_slice<u8>(row_arena, image.width);
 
-		// println("%p,%p,%p", output_rows[0].data, output_rows[1].data, output_rows[2].data);
-
         ensure(output_rows[0].data && output_rows[1].data && output_rows[2].data, "Failed to allocate rows");
 
         Duration line_time = time_it([&](){
             sobel_row(image, row, output_rows[0], row_arena);
             sobel_row(image, row, output_rows[1], row_arena);
             sobel_row(image, row, output_rows[2], row_arena);
-			// println("%d,%d,%d", x,y,z);
         });
 
 		COMPILER_MEMORY_BARRIER();
@@ -341,17 +351,7 @@ static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
 		}
 		COMPILER_MEMORY_BARRIER();
 
-		// if(row == 30){
-		// 	println("CHANGING ROW");
-		// 	auto p = (volatile u8*)output_rows[1].data;
-		// 	for(int x = 0; x < 20; x++){
-		// 		p[x]=0xff;
-		// 	}
-		// }
-
         line_time_acc = line_time_acc + line_time;
-
-        auto dest = output.pixel_data.skip(row * output.width).take(output.width);
 
         i32 cons = consensus(output_rows[0], output_rows[1], output_rows[2]);
         ensure(cons >= 0, "No consensus reached");
@@ -359,12 +359,9 @@ static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
         if(output_rows[cons].len != image.width){
             panic("Row error\r\n");
         }
-
-		// println("row: %d", int(row));
-		#ifdef FT_USE_CRC
 		row_crcs[row] = crc32(output_rows[cons]);
-		#endif
 
+        auto dest = output.pixel_data.skip(row * output.width).take(output.width);
         copy(dest, output_rows[cons]);
 		row_arena->reset();
     }
@@ -375,10 +372,45 @@ static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
 	COMPILER_MEMORY_BARRIER();
 
 	#ifdef FT_USE_CRC
-	COMPILER_MEMORY_BARRIER();
 	println("[CRC Output check]");
-	ensure(crc_row_check(output, row_crcs), "Corrupt output");
-	COMPILER_MEMORY_BARRIER();
+	if(!crc_row_check(output, row_crcs)){
+		for(i32 row = 0; row < image.height; row += 1){
+			if(row_crcs[row]){ continue; }
+			println("[RECOMPUTE: %d]", row);
+			output_rows[0] = make_slice<u8>(row_arena, image.width);
+			output_rows[1] = make_slice<u8>(row_arena, image.width);
+			output_rows[2] = make_slice<u8>(row_arena, image.width);
+
+			ensure(output_rows[0].data && output_rows[1].data && output_rows[2].data, "Failed to allocate rows");
+
+			Duration line_time = time_it([&](){
+				sobel_row(image, row, output_rows[0], row_arena);
+				sobel_row(image, row, output_rows[1], row_arena);
+				sobel_row(image, row, output_rows[2], row_arena);
+			});
+
+			COMPILER_MEMORY_BARRIER();
+			if(row == 30){
+				auto target = output_rows[0].slice(2, 9);
+				mem_set(target.data, 0xff, target.len);
+				println("!!!!");
+			}
+			COMPILER_MEMORY_BARRIER();
+
+			line_time_acc = line_time_acc + line_time;
+
+			i32 cons = consensus(output_rows[0], output_rows[1], output_rows[2]);
+			ensure(cons >= 0, "No consensus reached");
+
+			if(output_rows[cons].len != image.width){
+				panic("Row error\r\n");
+			}
+
+			auto dest = output.pixel_data.skip(row * output.width).take(output.width);
+			copy(dest, output_rows[cons]);
+			row_arena->reset();
+		}
+	}
 	#endif
 
 	auto end = tick_now();
