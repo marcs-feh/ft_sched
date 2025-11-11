@@ -304,6 +304,17 @@ struct Slice {
 		return data[idx];
 	}
 
+	bool operator==(Slice const&) = delete;
+	bool operator!=(Slice const&) = delete;
+
+	bool equals(Slice const& s){
+		if(len != s.len){ return false; }
+		for(usize i = 0; i < s.len; i += 1){
+			if(s.data[i] != data[i]){ return false;}
+		}
+		return true;
+	}
+
 	// Implicit conversion, these are very rare but this allows the same idiom to check for pointer null for slices as well
 	operator bool() const {
 		return len != 0 || data == nullptr;
@@ -448,7 +459,12 @@ struct String {
 	}
 
 	bool operator==(String s) const {
-		return !(*this != s);
+		if(len != s.len){ return false; }
+		for(usize i = 0; i < len; i += 1){
+			if(data[i] != s.data[i]){ return false; }
+		}
+
+		return true;
 	}
 
 	bool operator!=(String s) const {

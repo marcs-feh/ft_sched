@@ -317,7 +317,7 @@ struct CRC32<Array<i32, N>>{
 constexpr u32 scale_factor = 1000;
 
 template<int N>
-struct Convolution_Context{
+struct Convolution_Context {
 	Array<i32, N * N> _kernel;
 	volatile u32 _kernel_check_value;
 	Bitmap input;
