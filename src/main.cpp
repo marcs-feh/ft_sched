@@ -218,17 +218,17 @@ i32 consensus(Slice<u8> a, Slice<u8> b, Slice<u8> c){
 
 attribute_force_inline
 static inline
-void crc_output_check(Slice<u32> row_crcs){
-	println("[CRC Output check]");
+bool crc_row_check(Bitmap bmp, Slice<u32> row_crcs){
 	COMPILER_MEMORY_BARRIER();
-	for(i32 row = 0; row < image.height; row += 1){
-		auto output_row = output.pixel_data.skip(row * output.width).take(output.width);
-		volatile u32 check = crc32(output_row);
+	for(i32 row = 0; row < bmp.height; row += 1){
+		auto bmp_row = bmp.pixel_data.skip(row * bmp.width).take(bmp.width);
+		volatile u32 check = crc32(bmp_row);
 		if(row_crcs[row] != check){
-			panic("Output CRC Error");
+			return false;
 		}
 	}
 	COMPILER_MEMORY_BARRIER();
+	return true;
 }
 
 
@@ -265,7 +265,8 @@ static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output){
 	}
 
 	#ifdef FT_USE_CRC
-	crc_output_check(row_crcs);
+	println("[CRC Output check]");
+	ensure(crc_row_check(output, row_crcs), "Corrupt output");
 	#endif
 	
 
@@ -287,15 +288,15 @@ static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
         output_rows[1] = make_slice<u8>(row_arena, image.width);
         output_rows[2] = make_slice<u8>(row_arena, image.width);
 
+		// println("%p,%p,%p", output_rows[0].data, output_rows[1].data, output_rows[2].data);
+
         ensure(output_rows[0].data && output_rows[1].data && output_rows[2].data, "Failed to allocate rows");
 
         Duration line_time = time_it([&](){
             volatile i32 x = sobel_row(image, row, output_rows[0], row_arena);
             volatile i32 y = sobel_row(image, row, output_rows[1], row_arena);
             volatile i32 z = sobel_row(image, row, output_rows[2], row_arena);
-
-			#if FT_USe
-			println("%d,%d,%d", x,y,z);
+			// println("%d,%d,%d", x,y,z);
         });
 
 		if(row == 30){
@@ -323,10 +324,12 @@ static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
 		#endif
 
         copy(dest, output_rows[cons]);
+		row_arena->reset();
     }
 
 	#ifdef FT_USE_CRC
-	crc_output_check(row_crcs);
+	println("[CRC Output check]");
+	ensure(crc_row_check(output, row_crcs), "Corrupt output");
 	#endif
 
 	auto end = tick_now();
@@ -335,6 +338,7 @@ static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
 	return {int(elapsed.to_milli()), int(line_time_acc.to_milli() / image.height)};
 }
 
+#if defined(FT_SCHED_PLATFORM_STM32F411CEU6)
 attribute_force_inline
 static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
 	auto begin = tick_now();
@@ -363,9 +367,7 @@ static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
 	auto tmr0 = make_basic_task(&task_arena, 0, [&](TaskContext ctx){
 		while(1){
 			xSemaphoreTake(ready[0], portMAX_DELAY);
-
 			sobel_row(image, row, output_rows[0], row_arenas[0]);
-
 			done_count.fetch_add(1);
 		}
 
@@ -376,9 +378,7 @@ static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
 	auto tmr1 = make_basic_task(&task_arena, 0, [&](TaskContext ctx){
 		while(1){
 			xSemaphoreTake(ready[1], portMAX_DELAY);
-
 			sobel_row(image, row, output_rows[1], row_arenas[1]);
-
 			done_count.fetch_add(1);
 		}
 
@@ -389,9 +389,7 @@ static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
 	auto tmr2 = make_basic_task(&task_arena, 0, [&](TaskContext ctx){
 		while(1){
 			xSemaphoreTake(ready[2], portMAX_DELAY);
-
 			sobel_row(image, row, output_rows[2], row_arenas[2]);
-
 			done_count.fetch_add(1);
 		}
 
@@ -421,7 +419,6 @@ static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
             panic("Row error\r\n");
         }
 
-		// println("row: %d", int(row));
 		#ifdef FT_USE_CRC
 		row_crcs[row] = crc32(output_rows[cons]);
 		#endif
@@ -430,10 +427,20 @@ static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
 		done_count.store(0);
 	}
 
+	#ifdef FT_USE_CRC
+	println("[CRC Output check]");
+	ensure(crc_row_check(output, row_crcs), "Corrupt output");
+	#endif
+
 	auto end = tick_now();
 	auto elapsed = tick_diff(end, begin);
 	return {int(elapsed.to_milli()), int(line_time_acc.to_milli() / image.height)};
 }
+#else
+static inline Pair<int> do_sobel_tmr(Bitmap const&, Bitmap&){
+	panic("TODO: TMR on hosted target requires semaphore");
+}
+#endif
 
 #define FT_EXAMPLE_REEXEC
 
@@ -483,7 +490,7 @@ void entrypoint(){
 	fflush(stdout);
 
 	#if !defined(FT_SCHED_PLATFORM_STM32F411CEU6)
-	// dump_bitmap(output);
+	dump_bitmap(output);
 	#endif
 
 
