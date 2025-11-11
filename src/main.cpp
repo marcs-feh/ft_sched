@@ -262,16 +262,8 @@ static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output){
 		});
 		line_time_acc = line_time_acc + line_time;
 
-		COMPILER_MEMORY_BARRIER();
-		if(row == 30){
-			auto target = output_row.slice(2, 9);
-			mem_set(target.data, 0xff, target.len);
-			println("!!!!");
-		}
-		COMPILER_MEMORY_BARRIER();
-
 		if(ok != image.width){
-			printf("Row error\r\n");
+			panic("Row error");
 		}
 		auto dest = output.pixel_data.skip(row * output.width).take(output.width);
 
@@ -282,11 +274,6 @@ static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output){
 		copy(dest, output_row);
 		row_arena->offset = 0;
 	}
-
-	COMPILER_MEMORY_BARRIER();
-	output.pixel_data[960] = 0xff;
-	println("!!!!");
-	COMPILER_MEMORY_BARRIER();
 
 	#ifdef FT_USE_CRC
 	println("[CRC Output check]");
@@ -343,14 +330,6 @@ static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
             sobel_row(image, row, output_rows[2], row_arena);
         });
 
-		COMPILER_MEMORY_BARRIER();
-		if(row == 30){
-			auto target = output_rows[0].slice(2, 9);
-			mem_set(target.data, 0xff, target.len);
-			println("!!!!");
-		}
-		COMPILER_MEMORY_BARRIER();
-
         line_time_acc = line_time_acc + line_time;
 
         i32 cons = consensus(output_rows[0], output_rows[1], output_rows[2]);
@@ -367,11 +346,6 @@ static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
         copy(dest, output_rows[cons]);
 		row_arena->reset();
     }
-
-	COMPILER_MEMORY_BARRIER();
-	output.pixel_data[420] = 0xff;
-	println("!!!!");
-	COMPILER_MEMORY_BARRIER();
 
 	#ifdef FT_USE_CRC
 	println("[CRC Output check]");
@@ -390,14 +364,6 @@ static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
 				sobel_row(image, row, output_rows[1], row_arena);
 				sobel_row(image, row, output_rows[2], row_arena);
 			});
-
-			COMPILER_MEMORY_BARRIER();
-			if(row == 30){
-				auto target = output_rows[0].slice(2, 9);
-				mem_set(target.data, 0xff, target.len);
-				println("!!!!");
-			}
-			COMPILER_MEMORY_BARRIER();
 
 			line_time_acc = line_time_acc + line_time;
 
@@ -478,18 +444,8 @@ static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
 		while(1){
 			xSemaphoreTake(ready[2], portMAX_DELAY);
 			sobel_row(image, row, output_rows[2], row_arenas[2]);
-
-			COMPILER_MEMORY_BARRIER();
-			if(row == 30){
-				auto target = output_rows[2].slice(2, 9);
-				mem_set(target.data, 0xff, target.len);
-				println("!!!!");
-			}
-			COMPILER_MEMORY_BARRIER();
-
 			done_count.fetch_add(1);
 		}
-
 
 		panic("Unreachable");
 		return Unit{};
@@ -523,11 +479,6 @@ static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
 
 		done_count.store(0);
 	}
-
-	COMPILER_MEMORY_BARRIER();
-	output.pixel_data[960] = 0xff;
-	println("!!!!");
-	COMPILER_MEMORY_BARRIER();
 
 	#ifdef FT_USE_CRC
 	println("[CRC Output check]");
