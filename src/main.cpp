@@ -6,8 +6,8 @@
 #include "semphr.h"
 #endif
 
-#define FT_EXAMPLE_REEXEC
-#define FT_USE_CRC
+#define FT_EXAMPLE_TMR
+// #define FT_USE_CRC
 
 #include "base.hpp"
 
@@ -359,7 +359,9 @@ static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
         if(output_rows[cons].len != image.width){
             panic("Row error\r\n");
         }
+		#ifdef FT_USE_CRC
 		row_crcs[row] = crc32(output_rows[cons]);
+		#endif
 
         auto dest = output.pixel_data.skip(row * output.width).take(output.width);
         copy(dest, output_rows[cons]);
@@ -476,16 +478,24 @@ static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
 		while(1){
 			xSemaphoreTake(ready[2], portMAX_DELAY);
 			sobel_row(image, row, output_rows[2], row_arenas[2]);
+
+			COMPILER_MEMORY_BARRIER();
+			if(row == 30){
+				auto target = output_rows[2].slice(2, 9);
+				mem_set(target.data, 0xff, target.len);
+				println("!!!!");
+			}
+			COMPILER_MEMORY_BARRIER();
+
 			done_count.fetch_add(1);
 		}
+
 
 		panic("Unreachable");
 		return Unit{};
 	});
 
 	for(row = 0; row < image.height; row += 1){
-		ulTaskNotifyTake(pdTRUE, 0); // Clear pending
-
 		// Notify workers
 		xSemaphoreGive(ready[0]);
 		xSemaphoreGive(ready[1]);
@@ -514,11 +524,43 @@ static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
 		done_count.store(0);
 	}
 
+	COMPILER_MEMORY_BARRIER();
+	output.pixel_data[960] = 0xff;
+	println("!!!!");
+	COMPILER_MEMORY_BARRIER();
+
 	#ifdef FT_USE_CRC
-	COMPILER_MEMORY_BARRIER();
 	println("[CRC Output check]");
-	ensure(crc_row_check(output, row_crcs), "Corrupt output");
-	COMPILER_MEMORY_BARRIER();
+	if(!crc_row_check(output, row_crcs)){
+		for(i32 row = 0; row < image.height; row += 1){
+			if(row_crcs[row]){ continue; }
+			println("[RECOMPUTE: %d]", row);
+
+			// Notify workers
+			xSemaphoreGive(ready[0]);
+			xSemaphoreGive(ready[1]);
+			xSemaphoreGive(ready[2]);
+
+			auto row_begin = tick_now();
+			while(done_count.load() != 3){
+				task_yield();
+			}
+			auto line_time = tick_diff(tick_now(), row_begin);
+			line_time_acc = line_time_acc + line_time;
+
+			i32 cons = consensus(output_rows[0], output_rows[1], output_rows[2]);
+			ensure(cons >= 0, "No consensus reached");
+
+			if(output_rows[cons].len != image.width){
+				panic("Row error\r\n");
+			}
+
+			auto dest = output.pixel_data.skip(row * output.width).take(output.width);
+			copy(dest, output_rows[cons]);
+
+			done_count.store(0);
+		}
+	}
 	#endif
 
 
