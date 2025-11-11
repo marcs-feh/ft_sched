@@ -6,6 +6,8 @@
 #include "semphr.h"
 #endif
 
+#define FT_USE_CRC
+
 #include "base.hpp"
 
 #include "ft_sched.hpp"
@@ -238,7 +240,8 @@ static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output){
 	auto row_arena = main_arena.make_sub(350);
 	Duration line_time_acc = {0};
 	#ifdef FT_USE_CRC
-	auto row_crcs = make_slice<u32>(main_arena, image.height);
+	auto row_crcs = make_slice<u32>(&main_arena, image.height);
+	ensure(row_crcs.data, "Failed to allocate CRC space");
 	#endif
 
 
@@ -282,6 +285,10 @@ static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
 	auto row_arena = main_arena.make_sub(350 * 3);
 	Duration line_time_acc = {0};
 	Slice<u8> output_rows[3];
+	#ifdef FT_USE_CRC
+	auto row_crcs = make_slice<u32>(&main_arena, image.height);
+	ensure(row_crcs.data, "Failed to allocate CRC space");
+	#endif
 
     for(i32 row = 0; row < image.height; row += 1){
         output_rows[0] = make_slice<u8>(row_arena, image.width);
@@ -327,6 +334,10 @@ static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
 		row_arena->reset();
     }
 
+	// println("CHANGING OUTPUT");
+	// output.pixel_data[69] = 0xff;
+	// output.pixel_data[420] = 0x69;
+
 	#ifdef FT_USE_CRC
 	println("[CRC Output check]");
 	ensure(crc_row_check(output, row_crcs), "Corrupt output");
@@ -363,6 +374,11 @@ static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
 	Duration line_time_acc = {0};
 	i32 row = 0;
 	static Atomic<i32> done_count = 0;
+
+	#ifdef FT_USE_CRC
+	auto row_crcs = make_slice<u32>(&main_arena, image.height);
+	ensure(row_crcs.data, "Failed to allocate CRC space");
+	#endif
 
 	auto tmr0 = make_basic_task(&task_arena, 0, [&](TaskContext ctx){
 		while(1){
