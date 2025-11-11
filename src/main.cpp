@@ -6,8 +6,6 @@
 #include "semphr.h"
 #endif
 
-#define FT_USE_CRC32
-
 #include "base.hpp"
 
 #include "ft_sched.hpp"
@@ -218,12 +216,31 @@ i32 consensus(Slice<u8> a, Slice<u8> b, Slice<u8> c){
 	return majority;
 }
 
+attribute_force_inline
+static inline
+void crc_output_check(Slice<u32> row_crcs){
+	println("[CRC Output check]");
+	COMPILER_MEMORY_BARRIER();
+	for(i32 row = 0; row < image.height; row += 1){
+		auto output_row = output.pixel_data.skip(row * output.width).take(output.width);
+		volatile u32 check = crc32(output_row);
+		if(row_crcs[row] != check){
+			panic("Output CRC Error");
+		}
+	}
+	COMPILER_MEMORY_BARRIER();
+}
+
 
 attribute_force_inline
 static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output){
 	auto begin = tick_now();
 	auto row_arena = main_arena.make_sub(350);
 	Duration line_time_acc = {0};
+	#ifdef FT_USE_CRC
+	auto row_crcs = make_slice<u32>(main_arena, image.height);
+	#endif
+
 
 	for(i32 row = 0; row < image.height; row += 1){
 		auto output_row = make_slice<u8>(row_arena, image.width);
@@ -238,9 +255,19 @@ static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output){
 			printf("Row error\r\n");
 		}
 		auto dest = output.pixel_data.skip(row * output.width).take(output.width);
+
+		#ifdef FT_USE_CRC
+		row_crcs[row] = crc32(output_row);
+		#endif
+
 		copy(dest, output_row);
 		row_arena->offset = 0;
 	}
+
+	#ifdef FT_USE_CRC
+	crc_output_check(row_crcs);
+	#endif
+	
 
 	auto end = tick_now();
 	auto elapsed = tick_diff(end, begin);
@@ -266,6 +293,8 @@ static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
             volatile i32 x = sobel_row(image, row, output_rows[0], row_arena);
             volatile i32 y = sobel_row(image, row, output_rows[1], row_arena);
             volatile i32 z = sobel_row(image, row, output_rows[2], row_arena);
+
+			#if FT_USe
 			println("%d,%d,%d", x,y,z);
         });
 
@@ -287,10 +316,18 @@ static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
         if(output_rows[cons].len != image.width){
             panic("Row error\r\n");
         }
-		println("row: %d", int(row));
+
+		// println("row: %d", int(row));
+		#ifdef FT_USE_CRC
+		row_crcs[row] = crc32(output_rows[cons]);
+		#endif
+
         copy(dest, output_rows[cons]);
-        row_arena->offset = 0;
     }
+
+	#ifdef FT_USE_CRC
+	crc_output_check(row_crcs);
+	#endif
 
 	auto end = tick_now();
 	auto elapsed = tick_diff(end, begin);
@@ -376,7 +413,19 @@ static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
 		}
 		auto line_time = tick_diff(tick_now(), row_begin);
 		line_time_acc = line_time_acc + line_time;
-		// println("Row: %d", int(row));
+
+        i32 cons = consensus(output_rows[0], output_rows[1], output_rows[2]);
+        ensure(cons >= 0, "No consensus reached");
+
+        if(output_rows[cons].len != image.width){
+            panic("Row error\r\n");
+        }
+
+		// println("row: %d", int(row));
+		#ifdef FT_USE_CRC
+		row_crcs[row] = crc32(output_rows[cons]);
+		#endif
+        copy(dest, output_rows[cons]);
 
 		done_count.store(0);
 	}

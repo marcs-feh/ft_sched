@@ -340,20 +340,11 @@ struct Convolution_Context {
 	}
 
 	i32 get(i32 x, i32 y){
-		#if defined(FT_USE_CRC32)
-			COMPILER_MEMORY_BARRIER();
-			if(_kernel_check_value != crc32(_kernel)){
-				return {};
-			}
-			COMPILER_MEMORY_BARRIER();
-		#endif
-
 		auto space = arena_region_begin(scratch);
 		defer(arena_region_end(space));
 
 		if(u32(x) >= u32(input.width) || u32(y) >= u32(input.height)){
-			panic("Out of bounds get()");
-			return 0;
+			return -1;
 		}
 
 		auto r = rect_of(x, y);
