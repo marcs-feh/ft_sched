@@ -6,7 +6,7 @@
 #include "semphr.h"
 #endif
 
-// #define FT_USE_CRC32
+#define FT_USE_CRC32
 
 #include "base.hpp"
 
