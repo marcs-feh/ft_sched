@@ -6,7 +6,8 @@
 #include "semphr.h"
 #endif
 
-#define FT_USE_CRC
+#define FT_EXAMPLE_REEXEC
+// #define FT_USE_CRC
 
 #include "base.hpp"
 
@@ -221,18 +222,25 @@ i32 consensus(Slice<u8> a, Slice<u8> b, Slice<u8> c){
 attribute_force_inline
 static inline
 bool crc_row_check(Bitmap bmp, Slice<u32> row_crcs){
-	COMPILER_MEMORY_BARRIER();
+	auto ok = true;
 	for(i32 row = 0; row < bmp.height; row += 1){
 		auto bmp_row = bmp.pixel_data.skip(row * bmp.width).take(bmp.width);
+		COMPILER_MEMORY_BARRIER();
+
 		volatile u32 check = crc32(bmp_row);
 		if(row_crcs[row] != check){
-			return false;
+			row_crcs[row] = 1;
+			ok = false;
 		}
-	}
-	COMPILER_MEMORY_BARRIER();
-	return true;
-}
+		else {
+			row_crcs[row] = 0;
+		}
 
+		COMPILER_MEMORY_BARRIER();
+	}
+
+	return ok;
+}
 
 attribute_force_inline
 static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output){
@@ -254,6 +262,14 @@ static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output){
 		});
 		line_time_acc = line_time_acc + line_time;
 
+		COMPILER_MEMORY_BARRIER();
+		if(row == 30){
+			auto target = output_row.slice(2, 9);
+			mem_set(target.data, 0xff, target.len);
+			println("!!!!");
+		}
+		COMPILER_MEMORY_BARRIER();
+
 		if(ok != image.width){
 			printf("Row error\r\n");
 		}
@@ -267,11 +283,22 @@ static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output){
 		row_arena->offset = 0;
 	}
 
+	COMPILER_MEMORY_BARRIER();
+	output.pixel_data[960] = 0xff;
+	println("!!!!");
+	COMPILER_MEMORY_BARRIER();
+
 	#ifdef FT_USE_CRC
+	COMPILER_MEMORY_BARRIER();
 	println("[CRC Output check]");
-	ensure(crc_row_check(output, row_crcs), "Corrupt output");
+	if(!crc_row_check(output, row_crcs)){
+		auto end = tick_now();
+		auto elapsed = tick_diff(end, begin);
+		println("ERROR: Corrupt output");
+		return {int(elapsed.to_milli()), int(line_time_acc.to_milli() / image.height)};
+	}
+	COMPILER_MEMORY_BARRIER();
 	#endif
-	
 
 	auto end = tick_now();
 	auto elapsed = tick_diff(end, begin);
@@ -300,19 +327,27 @@ static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
         ensure(output_rows[0].data && output_rows[1].data && output_rows[2].data, "Failed to allocate rows");
 
         Duration line_time = time_it([&](){
-            volatile i32 x = sobel_row(image, row, output_rows[0], row_arena);
-            volatile i32 y = sobel_row(image, row, output_rows[1], row_arena);
-            volatile i32 z = sobel_row(image, row, output_rows[2], row_arena);
+            sobel_row(image, row, output_rows[0], row_arena);
+            sobel_row(image, row, output_rows[1], row_arena);
+            sobel_row(image, row, output_rows[2], row_arena);
 			// println("%d,%d,%d", x,y,z);
         });
 
+		COMPILER_MEMORY_BARRIER();
 		if(row == 30){
-			println("CHANGING ROW");
-			auto p = (volatile u8*)output_rows[1].data;
-			for(int x = 0; x < 20; x++){
-				p[x]=0xff;
-			}
+			auto target = output_rows[0].slice(2, 9);
+			mem_set(target.data, 0xff, target.len);
+			println("!!!!");
 		}
+		COMPILER_MEMORY_BARRIER();
+
+		// if(row == 30){
+		// 	println("CHANGING ROW");
+		// 	auto p = (volatile u8*)output_rows[1].data;
+		// 	for(int x = 0; x < 20; x++){
+		// 		p[x]=0xff;
+		// 	}
+		// }
 
         line_time_acc = line_time_acc + line_time;
 
@@ -334,13 +369,16 @@ static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
 		row_arena->reset();
     }
 
-	// println("CHANGING OUTPUT");
-	// output.pixel_data[69] = 0xff;
-	// output.pixel_data[420] = 0x69;
+	COMPILER_MEMORY_BARRIER();
+	output.pixel_data[420] = 0xff;
+	println("!!!!");
+	COMPILER_MEMORY_BARRIER();
 
 	#ifdef FT_USE_CRC
+	COMPILER_MEMORY_BARRIER();
 	println("[CRC Output check]");
 	ensure(crc_row_check(output, row_crcs), "Corrupt output");
+	COMPILER_MEMORY_BARRIER();
 	#endif
 
 	auto end = tick_now();
@@ -435,6 +473,7 @@ static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
             panic("Row error\r\n");
         }
 
+		auto dest = output.pixel_data.skip(row * output.width).take(output.width);
 		#ifdef FT_USE_CRC
 		row_crcs[row] = crc32(output_rows[cons]);
 		#endif
@@ -444,9 +483,12 @@ static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
 	}
 
 	#ifdef FT_USE_CRC
+	COMPILER_MEMORY_BARRIER();
 	println("[CRC Output check]");
 	ensure(crc_row_check(output, row_crcs), "Corrupt output");
+	COMPILER_MEMORY_BARRIER();
 	#endif
+
 
 	auto end = tick_now();
 	auto elapsed = tick_diff(end, begin);
@@ -457,8 +499,6 @@ static inline Pair<int> do_sobel_tmr(Bitmap const&, Bitmap&){
 	panic("TODO: TMR on hosted target requires semaphore");
 }
 #endif
-
-#define FT_EXAMPLE_REEXEC
 
 static inline
 void entrypoint(){
