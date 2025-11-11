@@ -59,7 +59,11 @@ void _freertos_task_wrapper(void* task_ptr){
 
 int RawTask::native_handle(){
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
-	return specific->handle.load(memory_order_relaxed);
+	static_assert(sizeof(TaskHandle_t) == sizeof(int), "Invalid type");
+	auto handle = specific->handle.load(memory_order_relaxed);
+	int res;
+	mem_copy(&res, handle, sizeof(res));
+	return res;
 }
 
 bool RawTask::_platform_init(Arena* arena, usize stack_size, RawTaskFunc, void*){

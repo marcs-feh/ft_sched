@@ -1,8 +1,12 @@
 #include <stdio.h>
 #include <math.h>
-#include "FreeRTOS.h"
 
-#define FT_USE_CRC32
+#if defined(FT_SCHED_PLATFORM_STM32F411CEU6)
+#include "FreeRTOS.h"
+#include "semphr.h"
+#endif
+
+// #define FT_USE_CRC32
 
 #include "base.hpp"
 
@@ -35,10 +39,6 @@ struct SystemStats {
 };
 
 SystemStats sys_statistics;
-
-#if defined(FT_SCHED_PLATFORM_STM32F411CEU6)
-#include "FreeRTOS.h"
-#endif
 
 template<class T>
 void print_slice(Slice<T> slice, char const* elem_fmt){
@@ -206,6 +206,13 @@ i32 consensus(Slice<u8> a, Slice<u8> b, Slice<u8> c){
 	return -1;
 }
 
+#define println(FMT, ...) do {\
+	printf(FMT "\r\n" __VA_OPT__(,) __VA_ARGS__); \
+	sleep_for(Duration::from_milli(2)); \
+} while(0)
+
+
+
 attribute_force_inline
 static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output){
 	auto begin = tick_now();
@@ -278,42 +285,95 @@ static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
 attribute_force_inline
 static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
 	auto begin = tick_now();
-	auto row_arena = main_arena.make_sub(350 * 3);
+
+	Arena* row_arenas[3];
+	row_arenas[0] = main_arena.make_sub(350);
+	row_arenas[1] = main_arena.make_sub(350);
+	row_arenas[2] = main_arena.make_sub(350);
+
+	ensure(row_arenas[0] && row_arenas[1] && row_arenas[2], "Failed to allocate row arenas");
+
 	Duration line_time_acc = {0};
 	Slice<u8> output_rows[3];
 
-	Atomic<i32> running_count = 0;
+	output_rows[0] = make_slice<u8>(row_arenas[0], image.width);
+	output_rows[1] = make_slice<u8>(row_arenas[1], image.width);
+	output_rows[2] = make_slice<u8>(row_arenas[2], image.width);
+
 	Atomic<bool> do_work = false;
 
 	Duration tmr0_time = {0};
 	i32 row = 0;
 
+	static Atomic<i32> done_count = 0;
+
+	SemaphoreHandle_t ready[3];
+	ready[0] = xSemaphoreCreateBinary();
+	ready[1] = xSemaphoreCreateBinary();
+	ready[2] = xSemaphoreCreateBinary();
+
+	TaskHandle_t coordinator = xTaskGetCurrentTaskHandle();
+
 	auto tmr0 = make_basic_task(&task_arena, 0, [&](TaskContext ctx){
 		while(1){
-			if(do_work.load()){
-				running_count.fetch_add(1);
-				sobel_row(image, row, output_rows[0], row_arena);
-			}
+			xSemaphoreTake(ready[0], portMAX_DELAY);
 
-			task_yield();
+			sobel_row(image, row, output_rows[0], row_arenas[0]);
+
+			done_count.fetch_add(1);
 		}
 
 		panic("Unreachable");
 		return Unit{};
 	});
 
+	auto tmr1 = make_basic_task(&task_arena, 0, [&](TaskContext ctx){
+		while(1){
+			xSemaphoreTake(ready[1], portMAX_DELAY);
+
+			sobel_row(image, row, output_rows[1], row_arenas[1]);
+
+			done_count.fetch_add(1);
+		}
+
+		panic("Unreachable");
+		return Unit{};
+	});
+
+	auto tmr2 = make_basic_task(&task_arena, 0, [&](TaskContext ctx){
+		while(1){
+			xSemaphoreTake(ready[2], portMAX_DELAY);
+
+			sobel_row(image, row, output_rows[2], row_arenas[2]);
+
+			done_count.fetch_add(1);
+		}
+
+		panic("Unreachable");
+		return Unit{};
+	});
+
+	for(row = 0; row < image.height; row += 1){
+		ulTaskNotifyTake(pdTRUE, 0); // Clear pending
+
+		// Notify workers
+		xSemaphoreGive(ready[0]);
+		xSemaphoreGive(ready[1]);
+		xSemaphoreGive(ready[2]);
+
+		while(done_count.load() != 3){
+			task_yield();
+		}
+		println("Row: %d", int(row));
+
+		done_count.store(0);
+	}
 
 	auto end = tick_now();
 	auto elapsed = tick_diff(end, begin);
 	return {int(elapsed.to_milli()), int(line_time_acc.to_milli() / image.height)};
 }
-
-#define println(FMT, ...) do {\
-	printf(FMT "\r\n" __VA_OPT__(,) __VA_ARGS__); \
-	sleep_for(Duration::from_milli(2)); \
-} while(0)
-
-#define FT_EXAMPLE_REEXEC
+#define FT_EXAMPLE_TMR
 
 static inline
 void entrypoint(){
@@ -348,6 +408,7 @@ void entrypoint(){
 
 	auto [total_time, time_per_row] = do_sobel_reexec(image, output);
 	#elif defined(FT_EXAMPLE_TMR)
+	auto [total_time, time_per_row] = do_sobel_tmr(image, output);
 	#else
 	#error "No example selected"
 	#endif
