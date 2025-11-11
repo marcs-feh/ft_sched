@@ -293,26 +293,19 @@ static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
 
 	ensure(row_arenas[0] && row_arenas[1] && row_arenas[2], "Failed to allocate row arenas");
 
-	Duration line_time_acc = {0};
 	Slice<u8> output_rows[3];
-
 	output_rows[0] = make_slice<u8>(row_arenas[0], image.width);
 	output_rows[1] = make_slice<u8>(row_arenas[1], image.width);
 	output_rows[2] = make_slice<u8>(row_arenas[2], image.width);
-
-	Atomic<bool> do_work = false;
-
-	Duration tmr0_time = {0};
-	i32 row = 0;
-
-	static Atomic<i32> done_count = 0;
 
 	SemaphoreHandle_t ready[3];
 	ready[0] = xSemaphoreCreateBinary();
 	ready[1] = xSemaphoreCreateBinary();
 	ready[2] = xSemaphoreCreateBinary();
 
-	TaskHandle_t coordinator = xTaskGetCurrentTaskHandle();
+	Duration line_time_acc = {0};
+	i32 row = 0;
+	static Atomic<i32> done_count = 0;
 
 	auto tmr0 = make_basic_task(&task_arena, 0, [&](TaskContext ctx){
 		while(1){
@@ -361,10 +354,13 @@ static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
 		xSemaphoreGive(ready[1]);
 		xSemaphoreGive(ready[2]);
 
+		auto row_begin = tick_now();
 		while(done_count.load() != 3){
 			task_yield();
 		}
-		println("Row: %d", int(row));
+		auto line_time = tick_diff(tick_now(), row_begin);
+		line_time_acc = line_time_acc + line_time;
+		// println("Row: %d", int(row));
 
 		done_count.store(0);
 	}
@@ -401,12 +397,12 @@ void entrypoint(){
 
 	#if defined(FT_EXAMPLE_SIMPLE)
 	auto _ = make_basic_task(&task_arena, [](TaskContext){ return Unit{}; });
-
 	auto [total_time, time_per_row] = do_sobel_simple(image, output);
+
 	#elif defined(FT_EXAMPLE_REEXEC)
 	auto _ = make_basic_task(&task_arena, [](TaskContext){ return Unit{}; });
-
 	auto [total_time, time_per_row] = do_sobel_reexec(image, output);
+
 	#elif defined(FT_EXAMPLE_TMR)
 	auto [total_time, time_per_row] = do_sobel_tmr(image, output);
 	#else
