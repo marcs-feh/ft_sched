@@ -111,12 +111,13 @@ bool RawTask::_platform_init(Arena* arena, usize stack_size, RawTaskFunc, void*)
 	ensure(handle != NULL, "Failed to create task");
 
 	specific->handle.store(handle);
+	specific->stack_base = (void*)stack;
 
 	return handle != NULL;
 }
 
 bool RawTask::_platform_join(){
-	constexpr auto join_interval = Duration::from_milli(25);
+	constexpr auto join_interval = Duration::from_milli(5);
 
 	auto specific = (RawTaskPlatformSpecific*)(&this->_specific);
 	TaskHandle_t handle = specific->handle.load();
@@ -126,7 +127,7 @@ bool RawTask::_platform_join(){
 		status < TaskStatus_Done;
 		status = this->_status.load(memory_order_relaxed)
 	){
-		printf("Joining from %d (status=%d)\r\n", int(id), int(status)); fflush(stdout);
+		// printf("Joining from %d (status=%d)\r\n", int(id), int(status)); fflush(stdout);
 		sleep_for(join_interval);
 	}
 
@@ -170,6 +171,11 @@ usize tick_frequency(){
 
 void task_yield(){
 	taskYIELD();
+}
+
+volatile void* RawTask::stack_base(){
+	auto specific = (RawTaskPlatformSpecific*)(&_specific);
+	return (volatile void*)specific->stack_base;
 }
 
 static_assert(sizeof(RawTaskPlatformSpecific) <= sizeof(RawTaskPlatformSpecificData), "Platform specific struct has insufficient size");

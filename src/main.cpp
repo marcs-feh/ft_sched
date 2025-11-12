@@ -6,8 +6,8 @@
 #include "semphr.h"
 #endif
 
-#define FT_EXAMPLE_SIMPLE
-#define FT_USE_CRC
+#define FT_EXAMPLE_REEXEC
+// #define FT_USE_CRC
 
 #include "base.hpp"
 
@@ -139,8 +139,11 @@ IO_Writer get_file_writer(cstring path){
 void dump_bitmap(Bitmap const& bmap){
 	auto writer = get_stdout_stream().as_writer();
 	writer.write(String("============ BEGIN BITMAP ==========\r\n").raw_bytes());
+	sleep_for(Duration::from_milli(10));
 	save_p5(bmap, writer);
+	sleep_for(Duration::from_milli(10));
 	writer.write(String("============ END BITMAP ============\r\n").raw_bytes());
+	sleep_for(Duration::from_milli(10));
 	writer.close();
 }
 #else
@@ -243,7 +246,7 @@ bool crc_row_check(Bitmap bmp, Slice<u32> row_crcs){
 }
 
 attribute_force_inline
-static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output){
+static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output, volatile void* stk = nullptr){
 	auto begin = tick_now();
 	auto row_arena = main_arena.make_sub(350);
 	Duration line_time_acc = {0};
@@ -276,20 +279,6 @@ static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output){
 	}
 
 
-		COMPILER_MEMORY_BARRIER();
-		bool on_main = false;
-		println("!!!");
-		volatile int * p = (volatile int *)(&main_arena_memory[0]);
-		usize off1 = 264;
-		usize off2 = 302;
-
-		p[off1+16] = ~p[off1] ^ 0xf610f234;
-		p[off1+32] = ~p[off1] ^ 0xf610f234;
-		p[off2-16] = ~p[off2] ^ 0xf610f234;
-		p[off2-32] = ~p[off2] ^ 0xf610f234;
-
-		COMPILER_MEMORY_BARRIER();
-
 	#ifdef FT_USE_CRC
 	println("[CRC Output check]");
 	if(!crc_row_check(output, row_crcs)){
@@ -320,6 +309,8 @@ static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output){
 
 	return {int(elapsed.to_milli()), int(line_time_acc.to_milli() / image.height)};
 }
+
+volatile void* stk;
 
 attribute_force_inline
 static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
@@ -379,6 +370,21 @@ static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
 				sobel_row(image, row, output_rows[1], row_arena);
 				sobel_row(image, row, output_rows[2], row_arena);
 			});
+
+			if(row == 40){
+				COMPILER_MEMORY_BARRIER();
+				println("!!!!");
+				volatile int* p = (volatile int*)stk;
+				int off = 32;
+
+				for(int i = -20; i < 64; i++){
+					println("%d -> %d", p[off+i], ~p[off+i]);
+					p[off+i] = ~p[off+i];
+				}
+
+				COMPILER_MEMORY_BARRIER();
+			}
+
 
 			line_time_acc = line_time_acc + line_time;
 
@@ -566,11 +572,18 @@ void entrypoint(){
 	println("[Sobel Filter]\r\n");
 
 	#if defined(FT_EXAMPLE_SIMPLE)
-		auto _ = make_basic_task(&task_arena, [](TaskContext){ return Unit{}; });
-		auto [total_time, time_per_row] = do_sobel_simple(image, output);
+		auto t = make_basic_task(&task_arena, [&](TaskContext c){
+			return do_sobel_simple(image, output, c.task->stack_base());
+		});
+		t->join();
+		auto [total_time, time_per_row] = t->result().unwrap();
 	#elif defined(FT_EXAMPLE_REEXEC)
-		auto _ = make_basic_task(&task_arena, [](TaskContext){ return Unit{}; });
-		auto [total_time, time_per_row] = do_sobel_reexec(image, output);
+		auto t = make_basic_task(&task_arena, [&](TaskContext c){
+			stk = c.task->stack_base();
+			return do_sobel_reexec(image, output);
+		});
+		t->join();
+		auto [total_time, time_per_row] = t->result().unwrap();
 	#elif defined(FT_EXAMPLE_TMR)
 		auto [total_time, time_per_row] = do_sobel_tmr(image, output);
 	#else

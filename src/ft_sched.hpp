@@ -202,6 +202,8 @@ struct RawTask {
 
 	int native_handle();
 
+	volatile void* stack_base();
+
 	[[nodiscard]]
 	bool attach_supervisor(DeadlineWatcher* watcher, Duration limit, CALLER_LOCATION);
 
