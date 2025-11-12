@@ -150,7 +150,7 @@ function execute_build(flash_serial, verbose)
 end
 
 function generate_image_data()
-	local file = 'lena.pgm'
+	local file = 'cat.pgm'
 	local data = c_embed(file);
 	local f = io.open(file .. '.cpp', 'wb')
 	f:write('static u8 image_pgm_data_storage[] = ')

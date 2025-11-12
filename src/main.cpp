@@ -6,8 +6,8 @@
 #include "semphr.h"
 #endif
 
-#define FT_EXAMPLE_TMR
-// #define FT_USE_CRC
+#define FT_EXAMPLE_SIMPLE
+#define FT_USE_CRC
 
 #include "base.hpp"
 
@@ -15,7 +15,7 @@
 
 #include "image.cpp"
 
-#include "lena.pgm.cpp"
+#include "cat.pgm.cpp"
 
 struct SystemStats {
 	Atomic<i32> failed_assertions = 0;
@@ -274,6 +274,21 @@ static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output){
 		copy(dest, output_row);
 		row_arena->offset = 0;
 	}
+
+
+		COMPILER_MEMORY_BARRIER();
+		bool on_main = false;
+		println("!!!");
+		volatile int * p = (volatile int *)(&main_arena_memory[0]);
+		usize off1 = 264;
+		usize off2 = 302;
+
+		p[off1+16] = ~p[off1] ^ 0xf610f234;
+		p[off1+32] = ~p[off1] ^ 0xf610f234;
+		p[off2-16] = ~p[off2] ^ 0xf610f234;
+		p[off2-32] = ~p[off2] ^ 0xf610f234;
+
+		COMPILER_MEMORY_BARRIER();
 
 	#ifdef FT_USE_CRC
 	println("[CRC Output check]");
@@ -536,6 +551,7 @@ void entrypoint(){
 		}
 		print_info();
 	#endif
+
 
 	auto image = load_p5(image_pgm_data).unwrap();
 	auto copy_time = time_it([=](){
