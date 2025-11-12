@@ -6,7 +6,7 @@
 #include "semphr.h"
 #endif
 
-#define FT_EXAMPLE_REEXEC
+#define FT_EXAMPLE_TMR
 // #define FT_USE_CRC
 
 #include "base.hpp"
@@ -16,6 +16,15 @@
 #include "image.cpp"
 
 #include "cat.pgm.cpp"
+
+#define corrupt_stack_var(name, start, size) do { \
+	COMPILER_MEMORY_BARRIER(); \
+	volatile char* p = (volatile char*)(&name); \
+	for(int i = 0; i < size; i++){ \
+		p[start+i] = ~p[start+i] ^ 0x55555555; \
+	} \
+	COMPILER_MEMORY_BARRIER(); \
+} while(0);
 
 struct SystemStats {
 	Atomic<i32> failed_assertions = 0;
@@ -246,7 +255,7 @@ bool crc_row_check(Bitmap bmp, Slice<u32> row_crcs){
 }
 
 attribute_force_inline
-static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output, volatile void* stk = nullptr){
+static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output){
 	auto begin = tick_now();
 	auto row_arena = main_arena.make_sub(350);
 	Duration line_time_acc = {0};
@@ -259,6 +268,11 @@ static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output, vol
 	for(i32 row = 0; row < image.height; row += 1){
 		auto output_row = make_slice<u8>(row_arena, image.width);
 		i32 ok = 0;
+
+		if(row == 50){
+			println("!!!!");
+			corrupt_stack_var(row, 0, 8);
+		}
 
 		Duration line_time = time_it([&](){
 			ok = sobel_row(image, row, output_row, row_arena);
@@ -338,6 +352,9 @@ static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
 
         line_time_acc = line_time_acc + line_time;
 
+
+
+
         i32 cons = consensus(output_rows[0], output_rows[1], output_rows[2]);
         ensure(cons >= 0, "No consensus reached");
 
@@ -351,6 +368,7 @@ static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
         auto dest = output.pixel_data.skip(row * output.width).take(output.width);
         copy(dest, output_rows[cons]);
 		row_arena->reset();
+
     }
 
 	#ifdef FT_USE_CRC
@@ -472,6 +490,8 @@ static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
 		return Unit{};
 	});
 
+	corrupt_stack_var(tmr0, 0, 8);
+
 	for(row = 0; row < image.height; row += 1){
 		// Notify workers
 		xSemaphoreGive(ready[0]);
@@ -573,13 +593,12 @@ void entrypoint(){
 
 	#if defined(FT_EXAMPLE_SIMPLE)
 		auto t = make_basic_task(&task_arena, [&](TaskContext c){
-			return do_sobel_simple(image, output, c.task->stack_base());
+			return do_sobel_simple(image, output);
 		});
 		t->join();
 		auto [total_time, time_per_row] = t->result().unwrap();
 	#elif defined(FT_EXAMPLE_REEXEC)
 		auto t = make_basic_task(&task_arena, [&](TaskContext c){
-			stk = c.task->stack_base();
 			return do_sobel_reexec(image, output);
 		});
 		t->join();
