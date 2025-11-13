@@ -7,7 +7,7 @@
 #endif
 
 #define FT_EXAMPLE_TMR
-// #define FT_USE_CRC
+#define FT_USE_CRC
 
 #include "base.hpp"
 
@@ -254,8 +254,8 @@ bool crc_row_check(Bitmap bmp, Slice<u32> row_crcs){
 	return ok;
 }
 
-attribute_force_inline
-static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output){
+static inline
+Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output){
 	auto begin = tick_now();
 	auto row_arena = main_arena.make_sub(350);
 	Duration line_time_acc = {0};
@@ -268,11 +268,6 @@ static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output){
 	for(i32 row = 0; row < image.height; row += 1){
 		auto output_row = make_slice<u8>(row_arena, image.width);
 		i32 ok = 0;
-
-		if(row == 50){
-			println("!!!!");
-			corrupt_stack_var(row, 0, 8);
-		}
 
 		Duration line_time = time_it([&](){
 			ok = sobel_row(image, row, output_row, row_arena);
@@ -326,6 +321,11 @@ static inline Pair<int> do_sobel_simple(Bitmap const& image, Bitmap& output){
 
 volatile void* stk;
 
+#define semaphore_create(...) xSemaphoreCreateBinary(__VA_ARGS__)
+#define semaphore_give(...) xSemaphoreGive(__VA_ARGS__)
+#define semaphore_take(...) xSemaphoreTake(__VA_ARGS__)
+#define Semaphore SemaphoreHandle_t
+
 attribute_force_inline
 static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
 	auto begin = tick_now();
@@ -351,9 +351,6 @@ static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
         });
 
         line_time_acc = line_time_acc + line_time;
-
-
-
 
         i32 cons = consensus(output_rows[0], output_rows[1], output_rows[2]);
         ensure(cons >= 0, "No consensus reached");
@@ -388,21 +385,6 @@ static inline Pair<int> do_sobel_reexec(Bitmap const& image, Bitmap& output){
 				sobel_row(image, row, output_rows[1], row_arena);
 				sobel_row(image, row, output_rows[2], row_arena);
 			});
-
-			if(row == 40){
-				COMPILER_MEMORY_BARRIER();
-				println("!!!!");
-				volatile int* p = (volatile int*)stk;
-				int off = 32;
-
-				for(int i = -20; i < 64; i++){
-					println("%d -> %d", p[off+i], ~p[off+i]);
-					p[off+i] = ~p[off+i];
-				}
-
-				COMPILER_MEMORY_BARRIER();
-			}
-
 
 			line_time_acc = line_time_acc + line_time;
 
@@ -443,10 +425,10 @@ static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
 	output_rows[1] = make_slice<u8>(row_arenas[1], image.width);
 	output_rows[2] = make_slice<u8>(row_arenas[2], image.width);
 
-	SemaphoreHandle_t ready[3];
-	ready[0] = xSemaphoreCreateBinary();
-	ready[1] = xSemaphoreCreateBinary();
-	ready[2] = xSemaphoreCreateBinary();
+	Semaphore ready[3];
+	ready[0] = semaphore_create();
+	ready[1] = semaphore_create();
+	ready[2] = semaphore_create();
 
 	Duration line_time_acc = {0};
 	i32 row = 0;
@@ -459,7 +441,7 @@ static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
 
 	auto tmr0 = make_basic_task(&task_arena, 0, [&](TaskContext ctx){
 		while(1){
-			xSemaphoreTake(ready[0], portMAX_DELAY);
+			semaphore_take(ready[0], portMAX_DELAY);
 			sobel_row(image, row, output_rows[0], row_arenas[0]);
 			done_count.fetch_add(1);
 		}
@@ -470,7 +452,7 @@ static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
 
 	auto tmr1 = make_basic_task(&task_arena, 0, [&](TaskContext ctx){
 		while(1){
-			xSemaphoreTake(ready[1], portMAX_DELAY);
+			semaphore_take(ready[1], portMAX_DELAY);
 			sobel_row(image, row, output_rows[1], row_arenas[1]);
 			done_count.fetch_add(1);
 		}
@@ -481,7 +463,7 @@ static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
 
 	auto tmr2 = make_basic_task(&task_arena, 0, [&](TaskContext ctx){
 		while(1){
-			xSemaphoreTake(ready[2], portMAX_DELAY);
+			semaphore_take(ready[2], portMAX_DELAY);
 			sobel_row(image, row, output_rows[2], row_arenas[2]);
 			done_count.fetch_add(1);
 		}
@@ -490,13 +472,11 @@ static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
 		return Unit{};
 	});
 
-	corrupt_stack_var(tmr0, 0, 8);
-
 	for(row = 0; row < image.height; row += 1){
 		// Notify workers
-		xSemaphoreGive(ready[0]);
-		xSemaphoreGive(ready[1]);
-		xSemaphoreGive(ready[2]);
+		semaphore_give(ready[0]);
+		semaphore_give(ready[1]);
+		semaphore_give(ready[2]);
 
 		auto row_begin = tick_now();
 		while(done_count.load() != 3){
@@ -507,16 +487,17 @@ static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
 
         i32 cons = consensus(output_rows[0], output_rows[1], output_rows[2]);
         ensure(cons >= 0, "No consensus reached");
+		auto cons_output = output_rows[cons];
 
-        if(output_rows[cons].len != image.width){
+        if(cons_output.len != image.width){
             panic("Row error\r\n");
         }
 
 		auto dest = output.pixel_data.skip(row * output.width).take(output.width);
 		#ifdef FT_USE_CRC
-		row_crcs[row] = crc32(output_rows[cons]);
+		row_crcs[row] = crc32(cons_output);
 		#endif
-        copy(dest, output_rows[cons]);
+        copy(dest, cons_output);
 
 		done_count.store(0);
 	}
@@ -529,9 +510,9 @@ static inline Pair<int> do_sobel_tmr(Bitmap const& image, Bitmap& output){
 			println("[RECOMPUTE: %d]", row);
 
 			// Notify workers
-			xSemaphoreGive(ready[0]);
-			xSemaphoreGive(ready[1]);
-			xSemaphoreGive(ready[2]);
+			semaphore_give(ready[0]);
+			semaphore_give(ready[1]);
+			semaphore_give(ready[2]);
 
 			auto row_begin = tick_now();
 			while(done_count.load() != 3){

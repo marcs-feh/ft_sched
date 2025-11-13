@@ -108,7 +108,7 @@ function execute_build(flash_serial, verbose)
 	if build_mode == 'debug' then
 		ldflags[#cflags+1] = '-g'
 		cflags[#cflags+1] = '-g'
-		cflags[#cflags+1] = '-O0'
+		cflags[#cflags+1] = '-Og'
 	elseif build_mode == 'release' then
 		cflags[#cflags+1] = '-Os'
 		cflags[#cflags+1] = '-g'
