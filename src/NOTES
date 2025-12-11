@@ -1,2 +1,10 @@
-
 USAR A OPCAO COM MPU (INCLUI ISSO NO TUTORIAL!!!!!!!) JEGUE!
+
+
+- teste simples (baseline) [4400ms]
+- teste simples (crc & monitoramento) [5000ms]
+- teste tmr (puro)
+- teste tmr (crc & monitoramento)
+- teste reexec (puro)
+- teste reexec (crc & monitoramento)
+

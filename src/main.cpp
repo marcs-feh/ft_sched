@@ -17,15 +17,6 @@
 
 #include "cat.pgm.cpp"
 
-#define corrupt_stack_var(name, start, size) do { \
-	COMPILER_MEMORY_BARRIER(); \
-	volatile char* p = (volatile char*)(&name); \
-	for(int i = 0; i < size; i++){ \
-		p[start+i] = ~p[start+i] ^ 0x55555555; \
-	} \
-	COMPILER_MEMORY_BARRIER(); \
-} while(0);
-
 struct SystemStats {
 	Atomic<i32> failed_assertions = 0;
 	Atomic<i32> crc_failures = 0;
